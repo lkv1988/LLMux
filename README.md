@@ -1,52 +1,63 @@
 # LLMux
 
-> Zero-dependency local LLM API proxy with smart routing, failover, circuit breaker and real-time dashboard
+[English](#) | [中文](./README_zh.md)
 
-[English](#english) | [中文](#中文)
+> Smart routing proxy for Claude API with cost tracking and failover
+
+Running multiple Claude Code sessions? Opus costs 5× more than Sonnet. Third-party providers offer discounts but timeout randomly. You need smart routing, automatic failover, and visibility into where your money goes.
+
+LLMux is a local proxy that routes requests to different providers based on model type, fails over automatically, and tracks every token with a real-time dashboard.
 
 ---
 
-## English
+## What It Does
 
-### What is LLMux
+```
+Smart Routing       ·  Failover + Circuit Breaker  ·  Real-time Dashboard
+Cost Tracking       ·  TTFB Monitoring             ·  Hot Config Reload
+Request Patching    ·  JSONL Traffic Logs
+```
 
-LLMux is a lightweight, zero-dependency Node.js proxy for Anthropic Claude API that provides:
+**Smart Routing**: Route `claude-sonnet-*` to provider A, `claude-opus-*` to provider B—you define the rules.
+**Failover**: Provider returns 429/500/timeout? Next provider takes over automatically.
+**Circuit Breaker**: Failed providers get benched for 5 minutes to prevent cascade failures.
+**Cost Tracking**: Per-provider, per-model token counts with discount rate support.
+**TTFB Monitoring**: Track Time To First Byte; detect slow providers before they block your workflow.
+**Dashboard**: Real-time UI with token velocity, cache hit rates, provider health, sparkline activity.
+**Hot Reload**: Edit `config.json`, changes apply instantly without restarting.
+**Request Patching**: Fixes Claude Code edge-case 400 errors by stripping empty text blocks.
+**Traffic Logs**: Daily JSONL files, auto-cleaned after 15 days.
 
-- **Smart Routing**: Route requests to different providers based on model type (Opus/Sonnet/Haiku)
-- **Automatic Failover**: Seamlessly switch to backup providers when primary fails
-- **Circuit Breaker**: Temporarily disable failing providers to prevent cascading failures
-- **Real-time Dashboard**: Monitor token usage, costs, and provider status in real-time
-- **Hot Reload**: Update configuration without restarting the server
-- **Cost Tracking**: Track token usage and costs with discount rate support
+---
 
-### Features
+## Dashboard
 
-- ✅ Zero dependencies - pure Node.js built-in modules only
-- 🔄 Smart provider routing with automatic failover
-- 🛡️ Circuit breaker pattern for provider health management
-- 📊 Real-time SSE-powered dashboard with ECharts visualization
-- 💰 Token usage tracking with hourly/daily statistics
-- 🔥 Hot configuration reload without downtime
-- ⚡ TTFB (Time To First Byte) monitoring
-- 📈 Request velocity tracking (tokens/min, tokens/hour)
-- 🎯 Model-based routing (Opus/Sonnet/Haiku)
-- 🔧 Configurable retry attempts and cooldown periods
+<!-- screenshot -->
 
-### Quick Start
+The dashboard shows:
+- Summary cards: total requests, cumulative cost, average TTFB
+- Provider status: live health indicators with cooldown timers
+- Token usage table: per-model stats with 30-minute sparkline activity graphs
+- Charts: hourly/daily token trends, model distribution pie chart, cache hit rate comparison
+- Time range selector: today / 7 days / 30 days
 
-#### 1. Clone and Setup
+Access at `http://localhost:34250/dashboard` after starting the proxy.
 
-\`\`\`bash
-git clone https://github.com/yourusername/llmux.git
+---
+
+## Quick Start
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/lkv1988/llmux.git
 cd llmux
 cp config.example.json config.json
-\`\`\`
+```
 
-#### 2. Configure
+Edit `config.json` with your API keys. Here's an example that routes Sonnet to multiple providers (you can configure any routing strategy you want):
 
-Edit \`config.json\` with your API keys and provider settings:
-
-\`\`\`json
+```json
 {
   "port": 34250,
   "cooldownMinutes": 5,
@@ -55,217 +66,160 @@ Edit \`config.json\` with your API keys and provider settings:
   "modelGroups": {
     "sonnet": [
       {
-        "name": "my_provider",
+        "name": "provider_sonnet_cheap_1",
+        "baseUrl": "https://api.cheap-proxy-1.com",
+        "apiKey": "sk-YOUR_CHEAP_KEY_1",
+        "discountRate": 0.5
+      },
+      {
+        "name": "provider_sonnet_official_fallback",
         "baseUrl": "https://api.anthropic.com",
-        "apiKey": "sk-ant-api03-YOUR_KEY_HERE",
+        "apiKey": "sk-ant-api03-YOUR_OFFICIAL_KEY_HERE",
         "discountRate": 1.0
       }
     ]
   }
 }
-\`\`\`
+```
 
-#### 3. Run
+### 2. Run the proxy
 
-\`\`\`bash
+```bash
 npm start
 # or
 node proxy.js
-\`\`\`
+```
 
-#### 4. Configure Your Client
+### 3. Point your client to the proxy
 
-Point your Claude API client to:
+Configure Claude Code (or any Claude API client):
 
-- **Base URL**: \`http://localhost:34250\`
-- **API Key**: Any valid format (e.g., \`sk-ant-dummy-placeholder-key\`)
+```bash
+# In Claude Code settings or environment
+Base URL: http://localhost:34250
+API Key:  sk-ant-dummy-placeholder-key
+```
 
-#### 5. Access Dashboard
+The API key can be any valid format—the proxy ignores it and uses keys from `config.json`.
 
-Open \`http://localhost:34250/dashboard\` in your browser to monitor real-time statistics.
+### 4. Open the dashboard
 
-### Configuration Reference
-
-#### Top-level Options
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| \`port\` | number | 34250 | Server listening port (auto-increments if occupied) |
-| \`cooldownMinutes\` | number | 5 | Circuit breaker cooldown duration in minutes |
-| \`maxAttemptsPerProvider\` | number | 3 | Max retry attempts per provider before failover |
-| \`ttfbTimeoutMs\` | number | 60000 | Time To First Byte timeout in milliseconds |
-
-#### Provider Configuration
-
-Each provider in \`modelGroups\` or \`defaultProviders\` supports:
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| \`name\` | string | Yes | Unique provider identifier |
-| \`baseUrl\` | string | Yes | API endpoint base URL |
-| \`apiKey\` | string | Yes | API authentication key |
-| \`discountRate\` | number | No | Cost multiplier for dashboard (1.0 = full price, 0.5 = 50% off) |
-
-#### Model Groups
-
-Define routing rules in \`modelGroups\`:
-
-\`\`\`json
-{
-  "modelGroups": {
-    "opus": [...],    // Routes claude-opus-* models
-    "sonnet": [...],  // Routes claude-sonnet-* models
-    "haiku": [...]    // Routes claude-haiku-* models
-  },
-  "defaultProviders": [...]  // Fallback for unmatched models
-}
-\`\`\`
-
-Providers are tried in array order. First successful response wins.
-
-### Dashboard
-
-The real-time dashboard provides:
-
-- **Summary Cards**: Total requests, costs, average TTFB
-- **Provider Status**: Live health status with cooldown indicators
-- **Token Usage Table**: Per-model statistics with sparkline activity
-- **Charts**: Hourly/daily trends and model distribution
-- **Time Range Selector**: Today / 7 days / 30 days
-
-### License
-
-AGPL-3.0
+Navigate to `http://localhost:34250/dashboard` to watch requests flow in real-time.
 
 ---
 
-## 中文
+## Configuration
 
-### LLMux 是什么
+### Provider Arrays = Priority Order
 
-LLMux 是一个轻量级、零依赖的 Node.js 代理服务器，专为 Anthropic Claude API 设计，提供：
+Providers in each `modelGroups` array are tried in order. First success wins. If a provider fails `maxAttemptsPerProvider` times (default: 3), it enters cooldown and the next provider is tried.
 
-- **智能路由**：根据模型类型（Opus/Sonnet/Haiku）将请求路由到不同供应商
-- **自动故障转移**：主供应商失败时无缝切换到备用供应商
-- **熔断机制**：临时禁用失败的供应商以防止级联故障
-- **实时监控面板**：实时监控 Token 用量、成本和供应商状态
-- **热更新**：无需重启服务器即可更新配置
-- **成本追踪**：支持折扣率的 Token 用量和成本追踪
+```json
+"sonnet": [
+  { "name": "provider_1", ... },      // Tried first
+  { "name": "provider_2", ... }       // Tried if provider_1 fails
+]
+```
 
-### 功能特性
+**Note**: The example config shows a "cheap provider first, official fallback" strategy, but you can configure any routing order you want. The proxy doesn't assume or enforce any specific provider hierarchy.
 
-- ✅ 零依赖 - 仅使用 Node.js 内置模块
-- 🔄 智能供应商路由与自动故障转移
-- 🛡️ 熔断器模式管理供应商健康状态
-- 📊 基于 SSE 的实时监控面板，使用 ECharts 可视化
-- 💰 Token 用量追踪，支持小时/每日统计
-- 🔥 配置热更新，无需停机
-- ⚡ TTFB（首字节时间）监控
-- 📈 请求速率追踪（tokens/分钟、tokens/小时）
-- 🎯 基于模型的路由（Opus/Sonnet/Haiku）
-- 🔧 可配置的重试次数和冷却周期
+### Model Matching
 
-### 快速开始
+`modelGroups` keys match model names via **case-insensitive substring search**:
 
-#### 1. 克隆并设置
+- `"opus"` matches `claude-opus-4-6`, `claude-opus-3-5-20240229`
+- `"sonnet"` matches `claude-sonnet-4-6`, `claude-sonnet-3-5-20240620`
+- `"haiku"` matches `claude-haiku-4-5-20251001`
 
-\`\`\`bash
-git clone https://github.com/yourusername/llmux.git
-cd llmux
-cp config.example.json config.json
-\`\`\`
+If no group matches, `defaultProviders` is used.
 
-#### 2. 配置
+### Discount Rate
 
-编辑 \`config.json\`，填入你的 API 密钥和供应商设置：
+`discountRate` **only affects dashboard cost display**—it does not influence routing logic. Set it to the actual multiplier you pay:
 
-\`\`\`json
-{
-  "port": 34250,
-  "cooldownMinutes": 5,
-  "maxAttemptsPerProvider": 3,
-  "ttfbTimeoutMs": 60000,
-  "modelGroups": {
-    "sonnet": [
-      {
-        "name": "my_provider",
-        "baseUrl": "https://api.anthropic.com",
-        "apiKey": "sk-ant-api03-YOUR_KEY_HERE",
-        "discountRate": 1.0
-      }
-    ]
-  }
-}
-\`\`\`
+- `1.0` = full official price
+- `0.5` = 50% discount
+- `0.8` = 20% discount
 
-#### 3. 运行
+This lets the dashboard show accurate cost comparisons between providers.
 
-\`\`\`bash
-npm start
-# 或
-node proxy.js
-\`\`\`
+### Configuration Reference
 
-#### 4. 配置客户端
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `port` | number | 34250 | Server port (auto-increments if occupied) |
+| `cooldownMinutes` | number | 5 | Circuit breaker cooldown duration |
+| `maxAttemptsPerProvider` | number | 3 | Retry attempts per provider before failover |
+| `ttfbTimeoutMs` | number | 60000 | Time To First Byte timeout (ms) |
 
-将你的 Claude API 客户端指向：
+**Provider fields:**
 
-- **Base URL**: \`http://localhost:34250\`
-- **API Key**: 任意有效格式（例如 \`sk-ant-dummy-placeholder-key\`）
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique provider identifier |
+| `baseUrl` | string | Yes | API endpoint base URL |
+| `apiKey` | string | Yes | API authentication key |
+| `discountRate` | number | No | Cost multiplier for dashboard (1.0 = full price) |
 
-#### 5. 访问监控面板
+---
 
-在浏览器中打开 \`http://localhost:34250/dashboard\` 查看实时统计数据。
+## How It Works
 
-### 配置参考
+Request lifecycle in 8 steps:
 
-#### 顶层选项
+1. **Client sends request** to `http://localhost:34250/v1/messages` with model name (e.g., `claude-sonnet-4-6`)
+2. **Model matching**: Proxy scans `modelGroups` keys for case-insensitive substring match (`"sonnet"` matches `claude-sonnet-4-6`)
+3. **Request patching**: Strips any empty text blocks from message content (fixes Claude Code edge-case 400 errors)
+4. **Provider selection**: Filters out providers in cooldown, builds priority-ordered list
+5. **Attempt with retries**: Tries first provider up to `maxAttemptsPerProvider` times with 500ms delay between retries
+6. **TTFB timeout detection**: If no response within `ttfbTimeoutMs` (default: 60s), kills request and tries next provider
+7. **Failover on error**: HTTP 429/401/403/5xx triggers immediate failover to next provider; failed provider enters cooldown
+8. **Success**: Streams response back to client, extracts token usage from SSE stream or JSON body, updates stats
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| \`port\` | number | 34250 | 服务器监听端口（如被占用会自动递增） |
-| \`cooldownMinutes\` | number | 5 | 熔断器冷却时长（分钟） |
-| \`maxAttemptsPerProvider\` | number | 3 | 每个供应商的最大重试次数 |
-| \`ttfbTimeoutMs\` | number | 60000 | 首字节超时时间（毫秒） |
+**Hot config reload**: `config.json` changes are detected via `fs.watch` and applied instantly—all provider cooldowns are cleared on reload.
 
-#### 供应商配置
+**Circuit breaker**: Failed providers are benched for `cooldownMinutes` (default: 5). If all providers are in cooldown, the proxy forces a retry anyway (better to try a flaky provider than fail immediately).
 
-\`modelGroups\` 或 \`defaultProviders\` 中的每个供应商支持：
+---
 
-| 字段 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| \`name\` | string | 是 | 唯一供应商标识符 |
-| \`baseUrl\` | string | 是 | API 端点基础 URL |
-| \`apiKey\` | string | 是 | API 认证密钥 |
-| \`discountRate\` | number | 否 | 面板成本倍率（1.0 = 原价，0.5 = 五折） |
+## Cost Tracking & Dashboard
 
-#### 模型组
+The dashboard answers questions your API bill can't:
 
-在 \`modelGroups\` 中定义路由规则：
+**Where is my money going?**
+- Per-provider, per-model token breakdown with actual cost (respecting `discountRate`)
+- Hourly and daily aggregation—see which sessions burned through your budget
 
-\`\`\`json
-{
-  "modelGroups": {
-    "opus": [...],    // 路由 claude-opus-* 模型
-    "sonnet": [...],  // 路由 claude-sonnet-* 模型
-    "haiku": [...]    // 路由 claude-haiku-* 模型
-  },
-  "defaultProviders": [...]  // 未匹配模型的后备供应商
-}
-\`\`\`
+**Is my discount provider cheating me?**
+- Cache hit rate comparison: `cache_read_input_tokens` vs `total_input_tokens`
+- If your discount provider shows 0% cache hits while another shows 40%, something's wrong
 
-供应商按数组顺序尝试，首个成功响应即返回。
+**Which provider is faster?**
+- Average TTFB per provider—identify slow endpoints before they block your workflow
 
-### 监控面板
+**What's my current velocity?**
+- Tokens/minute and tokens/hour—track burst activity during heavy coding sessions
 
-实时监控面板提供：
+**Activity patterns:**
+- 30-minute sparkline graphs per model—visualize request distribution over time
+- Hourly trend charts—identify peak usage hours
 
-- **汇总卡片**：总请求数、总成本、平均 TTFB
-- **供应商状态**：实时健康状态与冷却指示器
-- **Token 用量表**：按模型统计，带活动趋势图
-- **图表**：小时/每日趋势和模型分布
-- **时间范围选择器**：今天 / 7 天 / 30 天
+All data updates in real-time via Server-Sent Events (SSE). No polling, no refresh needed.
 
-### 许可证
+---
+
+## Technical Details
+
+- **Architecture**: Single-file Node.js HTTP proxy (`proxy.js`) + static dashboard HTML
+- **Backend Dependencies**: Zero—proxy uses only Node.js built-in modules (`http`, `https`, `fs`, `events`)
+- **Frontend Dependencies**: ECharts (charts), Tailwind CSS (styling), loaded via CDN
+- **Requirements**: Node.js >= 18
+- **Logs**: Daily JSONL files in `logs/` directory, auto-cleaned after 15 days
+- **Stats persistence**: Token statistics saved to `token_stats.json` (debounced writes every 2s)
+- **Port handling**: Auto-increments if default port (34250) is occupied
+
+---
+
+## License
 
 AGPL-3.0
