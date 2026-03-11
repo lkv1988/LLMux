@@ -1,0 +1,64 @@
+{
+  "port": 34250,
+  "cooldownMinutes": 5,
+  "maxAttemptsPerProvider": 3,
+  "ttfbTimeoutMs": 60000,
+  "modelGroups": {
+    "opus": [
+      {
+        "name": "provider_opus_main",
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "sk-ant-api03-YOUR_EXPENSIVE_KEY_HERE",
+        "discountRate": 1.0
+      },
+      {
+        "name": "provider_opus_backup",
+        "baseUrl": "https://api.backup-expensive.com",
+        "apiKey": "sk-YOUR_BACKUP_EXPENSIVE_KEY_HERE",
+        "discountRate": 0.8
+      }
+    ],
+    "sonnet": [
+      {
+        "name": "provider_sonnet_cheap_1",
+        "baseUrl": "https://api.cheap-proxy-1.com",
+        "apiKey": "sk-YOUR_CHEAP_KEY_1",
+        "discountRate": 0.5
+      },
+      {
+        "name": "provider_sonnet_cheap_2",
+        "baseUrl": "https://api.cheap-proxy-2.com",
+        "apiKey": "sk-YOUR_CHEAP_KEY_2",
+        "discountRate": 0.5
+      },
+      {
+        "name": "provider_sonnet_official_fallback",
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "sk-ant-api03-YOUR_OFFICIAL_KEY_HERE",
+        "discountRate": 1.0
+      }
+    ],
+    "haiku": [
+      {
+        "name": "provider_haiku_cheap_1",
+        "baseUrl": "https://api.cheap-proxy-1.com",
+        "apiKey": "sk-YOUR_CHEAP_KEY_1",
+        "discountRate": 0.5
+      },
+      {
+        "name": "provider_haiku_official_fallback",
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "sk-ant-api03-YOUR_OFFICIAL_KEY_HERE",
+        "discountRate": 1.0
+      }
+    ]
+  },
+  "defaultProviders": [
+    {
+      "name": "fallback_official",
+      "baseUrl": "https://api.anthropic.com",
+      "apiKey": "sk-ant-api03-YOUR_OFFICIAL_KEY_HERE",
+      "discountRate": 1.0
+    }
+  ]
+}

@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLMux Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0b0d11',
+                        card: '#13161d',
+                        primary: '#22d3ee',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444'
+                    },
+                    fontFamily: {
+                        sans: ['DM Sans', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0b0d11;
+            color: #e2e8f0;
+            font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+        }
+        .log-container {
+            font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            background-color: #000;
+            scrollbar-width: thin;
+            scrollbar-color: #374151 #000;
+        }
+        .log-container::-webkit-scrollbar { width: 6px; }
+        .log-container::-webkit-scrollbar-track { background: #000; }
+        .log-container::-webkit-scrollbar-thumb { background-color: #374151; border-radius: 3px; }
+
+        .pulse { animation: pulse-anim 2s infinite; }
+        @keyframes pulse-anim {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.35; }
+        }
+
+        @keyframes row-flash {
+          0%   { background: rgba(34, 211, 238, 0.18); box-shadow: inset 0 0 20px rgba(34,211,238,0.12); }
+          20%  { background: rgba(34, 211, 238, 0.12); box-shadow: inset 0 0 14px rgba(34,211,238,0.08); }
+          100% { background: transparent; box-shadow: none; }
+        }
+        .flash-row { animation: row-flash 3.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        #statsTable tbody tr[data-model-key] {
+            will-change: transform;
+        }
+
+        #statsTable { border-collapse: collapse; width: 100%; }
+        #statsTable th {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            color: #6b7280;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 6px 10px;
+            text-align: right;
+            border-bottom: 1px solid #1f2937;
+            white-space: nowrap;
+        }
+        #statsTable th:first-child { text-align: left; }
+
+        #statsTable td {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            padding: 6px 10px;
+            text-align: right;
+            border-bottom: 1px solid #0f1218;
+            color: #d1d5db;
+        }
+        #statsTable td:first-child {
+            font-family: 'DM Sans', sans-serif;
+            color: #9ca3af;
+            text-align: left;
+            font-size: 0.8rem;
+        }
+        #statsTable tbody tr:hover td { background-color: #13161d; }
+        #statsTable tr.total-row td {
+            border-top: 1px solid rgba(34, 211, 238, 0.2);
+            border-bottom: none;
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+        #statsTable tr.total-row td:first-child { color: #22d3ee; }
+        .cost-actual { color: #34d399; font-weight: 500; }
+        .cost-ref { color: #6b7280; }
+
+        .hit-green { color: #10b981; }
+        .hit-yellow { color: #f59e0b; }
+        .hit-red { color: #ef4444; }
+
+        .vel-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 10px;
+            border-radius: 9999px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            white-space: nowrap;
+        }
+
+        .provider-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            white-space: nowrap;
+            border: 1px solid;
+        }
+        .provider-pill.active {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
+        }
+        .provider-pill.cooldown {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+
+        .stat-card {
+            background: #13161d;
+            border: 1px solid #1f2937;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .time-btn {
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border: 1px solid #374151;
+            background: #13161d;
+            color: #9ca3af;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .time-btn:hover { background: #1f2937; color: #d1d5db; }
+        .time-btn.active {
+            background: rgba(34, 211, 238, 0.15);
+            border-color: #22d3ee;
+            color: #22d3ee;
+        }
+
+        /* Stats row 响应式 */
+        .stats-row { display: flex; justify-content: space-between; align-items: center; }
+        .stats-row .stat-divider { width: 1px; height: 1.5rem; background: #374151; }
+        .stats-row .stat-item { text-align: center; flex: 1; }
+        .stats-row .stat-value { font-size: 0.875rem; }
+        .stats-row .stat-label { font-size: 0.6rem; }
+        @media (min-width: 768px) {
+            .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.75rem; }
+            .stats-row .stat-divider { display: none; }
+            .stats-row .stat-item { text-align: left; background: #13161d; border: 1px solid #1f2937; border-radius: 0.75rem; padding: 1rem; }
+            .stats-row .stat-value { font-size: 1.5rem; }
+            .stats-row .stat-label { font-size: 0.75rem; margin-bottom: 0.25rem; }
+        }
+
+        /* 折叠区域 */
+        .collapsible-content { overflow: hidden; transition: max-height 0.3s ease, opacity 0.2s ease; }
+        .collapsible-content.collapsed { max-height: 0 !important; opacity: 0; padding: 0; }
+        .collapse-chevron { transition: transform 0.2s; }
+        .collapse-chevron.rotated { transform: rotate(180deg); }
+
+        /* 窄屏隐藏表格列 + 紧凑化 */
+        @media (max-width: 767px) {
+            .col-cache, .col-hit { display: none; }
+            #statsTable th, #statsTable td { padding: 5px 6px; font-size: 0.68rem; }
+            #statsTable td:first-child { font-size: 0.72rem; }
+            .vel-pill { padding: 1px 6px; font-size: 0.65rem; }
+            .time-btn { padding: 3px 8px; font-size: 0.7rem; }
+            .vel-pill { gap: 2px; }
+            .col-spark { padding: 3px 2px !important; }
+            .col-spark svg { width: 46px; height: 18px; }
+        }
+
+        /* Sparkline */
+        .col-spark { text-align: center !important; vertical-align: middle !important; padding: 4px 8px !important; }
+        @keyframes spark-draw {
+            from { stroke-dashoffset: 200; }
+            to { stroke-dashoffset: 0; }
+        }
+        .spark-animate polyline {
+            stroke-dasharray: 200;
+            stroke-dashoffset: 0;
+            animation: spark-draw 0.6s ease forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-3 md:p-4 gap-4">
+
+    <!-- Header -->
+    <header class="flex justify-between items-center bg-card px-4 py-3 rounded-xl border border-gray-800 shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="w-2.5 h-2.5 bg-success rounded-full pulse" style="box-shadow: 0 0 8px #10b981;"></div>
+            <h1 class="text-base font-bold text-white tracking-tight">
+                Local LLM API Proxy
+                <span class="version-badge text-gray-600 text-xs font-normal ml-1">v2.0</span>
+            </h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <div id="connectionStatus" class="text-xs text-warning">Connecting...</div>
+            <div class="header-divider h-4 w-px bg-gray-800"></div>
+            <span class="vel-pill" style="background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.2); color: #22d3ee;">
+                ⚡ <span id="velMin">0</span>/min
+            </span>
+            <span class="vel-pill" style="background: rgba(34,211,238,0.04); border: 1px solid rgba(34,211,238,0.1); color: #67e8f9;">
+                <span id="velHour">0</span>/hr
+            </span>
+        </div>
+    </header>
+
+    <!-- Time Selector + Summary Stats -->
+    <div class="flex flex-col md:flex-row gap-3">
+        <div class="flex gap-2">
+            <button class="time-btn active" data-range="today">Today</button>
+            <button class="time-btn" data-range="7d">7 Days</button>
+            <button class="time-btn" data-range="30d">30 Days</button>
+        </div>
+        <div class="flex-1 stats-row">
+            <div class="stat-item">
+                <div class="stat-label text-gray-500 uppercase tracking-wider">Total Requests</div>
+                <div id="statRequests" class="stat-value font-bold text-white">0</div>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <div class="stat-label text-gray-500 uppercase tracking-wider">Total Tokens</div>
+                <div id="statTokens" class="stat-value font-bold text-success">0</div>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <div class="stat-label text-gray-500 uppercase tracking-wider">Avg TTFB</div>
+                <div id="statTTFB" class="stat-value font-bold text-primary">0s</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token Usage Table -->
+    <div class="bg-card rounded-xl border border-gray-800 shadow-lg">
+        <div class="px-4 py-3 border-b border-gray-800">
+            <h2 class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Token Usage · Cache Stats</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table id="statsTable">
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th class="col-spark" style="width:90px">Activity</th>
+                        <th>Input</th>
+                        <th>Output</th>
+                        <th class="col-cache" title="Cache Creation / Cache Read">Cache ↑/↓</th>
+                        <th class="col-hit">Hit%</th>
+                        <th>Total</th>
+                        <th class="col-cost">Cost($)</th>
+                    </tr>
+                </thead>
+                <tbody id="statsBody">
+                    <tr>
+                        <td colspan="8" style="text-align:center; font-family:'DM Sans',sans-serif; color:#4b5563; font-style:italic;">No data yet...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-800">
+            <h2 class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3">Provider Status</h2>
+            <div id="providerPills" class="flex flex-wrap gap-2">
+                <div class="text-xs text-gray-600 italic">Waiting for requests...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="bg-card rounded-xl border border-gray-800 shadow-lg">
+        <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center cursor-pointer" onclick="toggleSection('analytics')">
+            <h2 class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Usage Analytics</h2>
+            <svg class="collapse-chevron w-4 h-4 text-gray-500 rotated" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </div>
+        <div class="collapsible-content collapsed" id="analyticsContent" style="max-height: 0;">
+            <div class="p-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div class="md:col-span-3">
+                    <div id="trendChart" style="height:260px;"></div>
+                </div>
+                <div class="md:col-span-2 flex flex-col" style="height:260px;">
+                    <div id="pieChart" style="flex:1; min-height:0;"></div>
+                    <div id="pieLegend" class="text-xs space-y-1" style="flex-shrink:0;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Logs -->
+    <div class="bg-card rounded-xl border border-gray-800 shadow-lg flex flex-col">
+        <div class="px-3 py-2 border-b border-gray-800 flex justify-between items-center cursor-pointer" style="background: rgba(17,24,39,0.5); border-radius: 0.75rem 0.75rem 0 0;" onclick="toggleSection('traffic')">
+            <h2 class="text-xs text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                Live Traffic
+                <svg class="collapse-chevron w-3.5 h-3.5 ml-auto rotated" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </h2>
+            <button onclick="event.stopPropagation(); document.getElementById('logs').innerHTML=''" class="text-xs text-gray-600 hover:text-gray-300 transition-colors">Clear</button>
+        </div>
+        <div class="collapsible-content collapsed" id="trafficContent" style="max-height: 0;">
+            <div id="logs" class="log-container p-3 overflow-y-auto text-xs whitespace-pre-wrap break-words" style="height: 300px;">
+                <div style="color:#4b5563;">System initialized. Waiting for incoming traffic...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const logsEl = document.getElementById('logs');
+        const connStatusEl = document.getElementById('connectionStatus');
+        const providerPillsEl = document.getElementById('providerPills');
+        const statsBodyEl = document.getElementById('statsBody');
+
+        let allStats = {};
+        let globalStats = {};
+        let activeProviders = {};
+        let providerDiscounts = {};
+        let sparklines = {};
+        let selectedRange = 'today';
+        let autoScroll = true;
+        let trendChart, pieChart;
+        let chartsReady = false;
+        let chartUpdateTimeout = null;
+        let lastUpdateTime = {};  // key: "model__provider" → timestamp
+
+        const PRICING = {
+            opus:   { input: 5.00, output: 25.00, cacheWrite: 6.25, cacheRead: 0.50 },
+            sonnet: { input: 3.00, output: 15.00, cacheWrite: 3.75, cacheRead: 0.30 },
+            haiku:  { input: 1.00, output: 5.00,  cacheWrite: 1.25, cacheRead: 0.10 },
+        };
+
+        const MODEL_COLORS = ['#22d3ee','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1'];
+
+        function getModelTier(name) {
+            const m = name.toLowerCase();
+            if (m.includes('opus')) return 'opus';
+            if (m.includes('haiku')) return 'haiku';
+            return 'sonnet';
+        }
+
+        function calcCost(inp, out, cr, cc, model) {
+            const t = PRICING[getModelTier(model)];
+            return (inp * t.input + out * t.output + cr * t.cacheRead + cc * t.cacheWrite) / 1e6;
+        }
+
+        function fmtCost(d) {
+            if (d >= 1) return '$' + d.toFixed(2);
+            if (d >= 0.01) return '$' + d.toFixed(3);
+            return d > 0 ? '$' + d.toFixed(4) : '$0';
+        }
+
+        function fmtTokens(n) {
+            if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+            if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function displayModelName(name) {
+            const m = name.replace(/^claude-/, '').replace(/-(\d+)-(\d+).*$/, ' $1.$2');
+            if (m === name) return name;
+            return m.replace(/^./, c => c.toUpperCase());
+        }
+
+        function getModelColor(modelName) {
+            let hash = 0;
+            for (let i = 0; i < modelName.length; i++) {
+                hash = modelName.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return MODEL_COLORS[Math.abs(hash) % MODEL_COLORS.length];
+        }
+
+        function localDateStr(d = new Date()) {
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+
+        function getDateRange() {
+            const today = localDateStr();
+            if (selectedRange === 'today') return [today];
+            const dates = [];
+            const days = selectedRange === '7d' ? 7 : 30;
+            for (let i = 0; i < days; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                dates.push(localDateStr(d));
+            }
+            return dates.reverse();
+        }
+
+        function updateSummaryStats() {
+            const dates = getDateRange();
+            let totalReq = 0, totalTokens = 0, totalTTFB = 0, ttfbCount = 0;
+
+            for (const date of dates) {
+                if (!allStats[date]) continue;
+                for (const provider in allStats[date]) {
+                    for (const model in allStats[date][provider]) {
+                        const s = allStats[date][provider][model];
+                        totalReq += (s.request_count || 0);
+                        totalTokens += (s.total_input || 0) + (s.total_output || 0) + (s.cache_read || 0) + (s.cache_creation || 0);
+                        if (s.total_ttfb && s.request_count) {
+                            totalTTFB += s.total_ttfb;
+                            ttfbCount += s.request_count;
+                        }
+                    }
+                }
+            }
+
+            document.getElementById('statRequests').textContent = totalReq.toLocaleString();
+            document.getElementById('statTokens').textContent = fmtTokens(totalTokens);
+            document.getElementById('statTTFB').textContent = ttfbCount > 0 ? (totalTTFB / ttfbCount / 1000).toFixed(2) + 's' : '0s';
+        }
+
+        function updateProviderPills() {
+            if (Object.keys(activeProviders).length === 0) return;
+            providerPillsEl.innerHTML = '';
+            const now = Date.now();
+            const dates = getDateRange();
+
+            const providerTTFB = {};
+            for (const date of dates) {
+                if (!allStats[date]) continue;
+                for (const provider in allStats[date]) {
+                    if (!providerTTFB[provider]) providerTTFB[provider] = { ttfb: 0, count: 0 };
+                    for (const model in allStats[date][provider]) {
+                        const s = allStats[date][provider][model];
+                        if (s.total_ttfb && s.request_count) {
+                            providerTTFB[provider].ttfb += s.total_ttfb;
+                            providerTTFB[provider].count += s.request_count;
+                        }
+                    }
+                }
+            }
+
+            for (const [, data] of Object.entries(activeProviders)) {
+                const isCooldown = data.status === 'cooldown' && data.expiry > now;
+                const dotColor = isCooldown ? '#ef4444' : '#10b981';
+                const statusText = isCooldown ? `${Math.ceil((data.expiry - now) / 1000)}s` : 'Active';
+                const avgTTFB = providerTTFB[data.provider] && providerTTFB[data.provider].count > 0
+                    ? (providerTTFB[data.provider].ttfb / providerTTFB[data.provider].count / 1000).toFixed(1) + 's'
+                    : '';
+
+                const pill = document.createElement('div');
+                pill.className = 'provider-pill ' + (isCooldown ? 'cooldown' : 'active');
+                pill.innerHTML = `
+                    <div style="width:7px;height:7px;background:${dotColor};border-radius:50%;"></div>
+                    <span>${data.provider}</span>
+                    ${avgTTFB ? `<span style="color:#6b7280;font-size:0.65rem;">~${avgTTFB}</span>` : ''}
+                    ${isCooldown ? `<span style="font-weight:600;">${statusText}</span>` : ''}
+                `;
+                providerPillsEl.appendChild(pill);
+            }
+        }
+
+        function buildSparklineSVG(data30) {
+            const w = 80, h = 24, pts = data30.length === 30 ? data30 : new Array(30).fill(0);
+            const maxVal = Math.max(...pts, 1);
+            const allZero = pts.every(v => v === 0);
+            if (allZero) {
+                return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;margin:auto;opacity:0.25;">` +
+                    `<line x1="2" y1="${h/2}" x2="${w-2}" y2="${h/2}" stroke="#6b7280" stroke-width="1"/></svg>`;
+            }
+            const step = (w - 4) / (pts.length - 1);
+            const coords = pts.map((v, i) => {
+                const x = 2 + i * step;
+                const y = h - 3 - (v / maxVal) * (h - 6);
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+            const lastX = (2 + (pts.length - 1) * step).toFixed(1);
+            const lastY = (h - 3 - (pts[pts.length - 1] / maxVal) * (h - 6)).toFixed(1);
+            const isActive = pts[pts.length - 1] > 0;
+            const dotColor = isActive ? '#22d3ee' : '#6b7280';
+            const areaCoords = `2,${h-1} ${coords} ${lastX},${h-1}`;
+            return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;margin:auto;">` +
+                `<polygon points="${areaCoords}" fill="rgba(34,211,238,0.12)" stroke="none"/>` +
+                `<polyline points="${coords}" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>` +
+                `<circle cx="${lastX}" cy="${lastY}" r="${isActive ? 2.5 : 1.5}" fill="${dotColor}" ${isActive ? 'class="pulse"' : ''}/>` +
+                `</svg>`;
+        }
+
+        function hitClass(pct) {
+            if (pct >= 60) return 'hit-green';
+            if (pct >= 30) return 'hit-yellow';
+            return 'hit-red';
+        }
+
+        // 根据 model 名匹配 model group（复用后端的路由逻辑）
+        function getModelGroup(modelName) {
+            const m = modelName.toLowerCase();
+            for (const group in providerDiscounts) {
+                if (group !== 'default' && m.includes(group.toLowerCase())) return group;
+            }
+            return 'default';
+        }
+
+        // 查找 provider+model 对应的费率
+        function getDiscount(providerName, modelName) {
+            const group = getModelGroup(modelName);
+            if (providerDiscounts[group] && providerDiscounts[group][providerName] !== undefined) {
+                return providerDiscounts[group][providerName];
+            }
+            if (providerDiscounts['default'] && providerDiscounts['default'][providerName] !== undefined) {
+                return providerDiscounts['default'][providerName];
+            }
+            return undefined;
+        }
+
+        function renderStats() {
+            // 按当前时间范围从 allStats 聚合数据
+            const dates = getDateRange();
+            const aggregated = {}; // provider > model > summed fields
+            for (const date of dates) {
+                if (!allStats[date]) continue;
+                for (const provider in allStats[date]) {
+                    if (!aggregated[provider]) aggregated[provider] = {};
+                    for (const model in allStats[date][provider]) {
+                        if (!aggregated[provider][model]) {
+                            aggregated[provider][model] = { total_input: 0, total_output: 0, cache_read: 0, cache_creation: 0 };
+                        }
+                        const s = allStats[date][provider][model];
+                        aggregated[provider][model].total_input += s.total_input || 0;
+                        aggregated[provider][model].total_output += s.total_output || 0;
+                        aggregated[provider][model].cache_read += s.cache_read || 0;
+                        aggregated[provider][model].cache_creation += s.cache_creation || 0;
+                    }
+                }
+            }
+
+            const rows = [];
+            const totals = { inp: 0, out: 0, cr: 0, cc: 0, cost: 0 };
+
+            for (const providerName in aggregated) {
+                for (const modelName in aggregated[providerName]) {
+                    const s = aggregated[providerName][modelName];
+                    const inp = s.total_input;
+                    const out = s.total_output;
+                    const cr = s.cache_read;
+                    const cc = s.cache_creation;
+                    const hitPct = (inp + cr + cc) > 0 ? cr / (inp + cr + cc) * 100 : 0;
+                    const refCost = calcCost(inp, out, cr, cc, modelName);
+                    const discount = getDiscount(providerName, modelName);
+                    const actualCost = (discount !== undefined) ? refCost * discount : refCost;
+                    const total = inp + out + cr + cc;
+                    totals.inp += inp; totals.out += out; totals.cr += cr; totals.cc += cc;
+                    totals.cost += actualCost;
+                    rows.push({ provider: providerName, model: modelName, inp, out, cr, cc, hitPct, total, actualCost, discount });
+                }
+            }
+
+            rows.sort((a, b) => {
+                // today 模式下优先按最近活跃时间排序（实时感知）
+                if (selectedRange === 'today') {
+                    const aTime = lastUpdateTime[`${a.model}__${a.provider}`] || 0;
+                    const bTime = lastUpdateTime[`${b.model}__${b.provider}`] || 0;
+                    if (aTime !== bTime) return bTime - aTime;
+                }
+                return b.total - a.total;
+            });
+
+            if (rows.length === 0) {
+                statsBodyEl.innerHTML = `<tr><td colspan="8" style="text-align:center;font-family:'DM Sans',sans-serif;color:#4b5563;font-style:italic;padding:12px;">No data yet...</td></tr>`;
+                return;
+            }
+
+            // --- FLIP: First ---
+            const firstPos = {};
+            statsBodyEl.querySelectorAll('tr[data-model-key]').forEach(tr => {
+                firstPos[tr.dataset.modelKey] = tr.getBoundingClientRect().top;
+            });
+
+            // --- Build/update rows ---
+            const existingRows = new Map();
+            statsBodyEl.querySelectorAll('tr[data-model-key]').forEach(tr => {
+                existingRows.set(tr.dataset.modelKey, tr);
+            });
+            // 移除旧 total row
+            const oldTotal = statsBodyEl.querySelector('tr.total-row');
+            if (oldTotal) oldTotal.remove();
+            // 移除 "No data" 占位行（无 data-model-key 的行）
+            statsBodyEl.querySelectorAll('tr:not([data-model-key])').forEach(tr => tr.remove());
+
+            const seenKeys = new Set();
+            for (const r of rows) {
+                const key = `${r.model}__${r.provider}`;
+                seenKeys.add(key);
+                let tr = existingRows.get(key);
+                if (!tr) {
+                    tr = document.createElement('tr');
+                    tr.dataset.modelKey = key;
+                }
+                const displayName = displayModelName(r.model);
+                const discountText = r.discount !== undefined ? ` <span style="color:#6b7280;font-size:0.65rem;">(${r.discount}x)</span>` : '';
+                const costCell = (() => {
+                    const refCost = calcCost(r.inp, r.out, r.cr, r.cc, r.model);
+                    if (refCost === 0) return '—';
+                    if (!r.discount || r.discount === 1.0) return `<span class="cost-ref">${fmtCost(refCost)}</span>`;
+                    return `<div class="cost-actual">${fmtCost(r.actualCost)}</div><div class="cost-ref" style="text-decoration:line-through;font-size:0.68rem;">${fmtCost(refCost)}</div>`;
+                })();
+                tr.innerHTML = `
+                    <td><div style="color:#d1d5db;">${displayName}${discountText}</div><div style="font-size:0.6rem;color:#4b5563;">${r.provider}</div></td>
+                    <td class="col-spark">${buildSparklineSVG(sparklines[key] || new Array(30).fill(0))}</td>
+                    <td>${fmtTokens(r.inp)}</td>
+                    <td>${fmtTokens(r.out)}</td>
+                    <td class="col-cache"><span class="hit-yellow">↑${fmtTokens(r.cc)}</span> / <span class="hit-green">↓${fmtTokens(r.cr)}</span></td>
+                    <td class="col-hit ${hitClass(r.hitPct)}">${r.hitPct.toFixed(1)}%</td>
+                    <td>${fmtTokens(r.total)}</td>
+                    <td class="col-cost">${costCell}</td>`;
+                statsBodyEl.appendChild(tr);  // 已存在则移动，新建则插入
+            }
+
+            // 移除不再存在的行
+            existingRows.forEach((tr, key) => { if (!seenKeys.has(key)) tr.remove(); });
+
+            // 添加 total row
+            const totHitPct = (totals.inp + totals.cr + totals.cc) > 0
+                ? totals.cr / (totals.inp + totals.cr + totals.cc) * 100 : 0;
+            const totTotal = totals.inp + totals.out + totals.cr + totals.cc;
+            const totalTr = document.createElement('tr');
+            totalTr.className = 'total-row';
+            totalTr.innerHTML = `
+                <td>All Total</td>
+                <td class="col-spark"></td>
+                <td>${fmtTokens(totals.inp)}</td>
+                <td>${fmtTokens(totals.out)}</td>
+                <td class="col-cache"><span class="hit-yellow">↑${fmtTokens(totals.cc)}</span> / <span class="hit-green">↓${fmtTokens(totals.cr)}</span></td>
+                <td class="col-hit ${hitClass(totHitPct)}">${totHitPct.toFixed(1)}%</td>
+                <td>${fmtTokens(totTotal)}</td>
+                <td class="col-cost cost-actual">${fmtCost(totals.cost)}</td>`;
+            statsBodyEl.appendChild(totalTr);
+
+            // --- FLIP: Last + Invert + Play ---
+            statsBodyEl.querySelectorAll('tr[data-model-key]').forEach(tr => {
+                const key = tr.dataset.modelKey;
+                const first = firstPos[key];
+                if (first === undefined) return;  // 新行，不做动画
+                const last = tr.getBoundingClientRect().top;
+                const delta = first - last;
+                if (Math.abs(delta) < 1) return;  // 没移动
+
+                tr.style.transform = `translateY(${delta}px)`;
+                tr.style.transition = 'none';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        tr.style.transition = 'transform 0.4s cubic-bezier(0.2, 0, 0, 1)';
+                        tr.style.transform = '';
+                        tr.addEventListener('transitionend', () => {
+                            tr.style.transition = '';
+                        }, { once: true });
+                    });
+                });
+            });
+        }
+
+        function initCharts() {
+            if (chartsReady) return;
+            trendChart = echarts.init(document.getElementById('trendChart'), 'dark');
+            pieChart = echarts.init(document.getElementById('pieChart'), 'dark');
+            trendChart.setOption({ backgroundColor: 'transparent' });
+            pieChart.setOption({ backgroundColor: 'transparent' });
+            chartsReady = true;
+        }
+
+        function updateCharts() {
+            if (!chartsReady) return;
+            const dates = getDateRange();
+
+            // Aggregate by model across providers
+            const modelData = {};
+            for (const date of dates) {
+                if (!allStats[date]) continue;
+                for (const provider in allStats[date]) {
+                    for (const model in allStats[date][provider]) {
+                        if (!modelData[model]) modelData[model] = { total: 0, hourly: {}, daily: {}, requests: 0, cost: 0 };
+                        const s = allStats[date][provider][model];
+                        const tokens = (s.total_input || 0) + (s.total_output || 0) + (s.cache_read || 0) + (s.cache_creation || 0);
+                        modelData[model].total += tokens;
+                        modelData[model].requests += (s.request_count || 0);
+                        const cost = calcCost(s.total_input || 0, s.total_output || 0, s.cache_read || 0, s.cache_creation || 0, model);
+                        const discount = getDiscount(provider, model) ?? 1.0;
+                        modelData[model].cost += cost * discount;
+
+                        if (selectedRange === 'today' && s.hourly) {
+                            for (const hour in s.hourly) {
+                                modelData[model].hourly[hour] = (modelData[model].hourly[hour] || 0) + s.hourly[hour];
+                            }
+                        }
+                        if (selectedRange !== 'today') {
+                            modelData[model].daily[date] = (modelData[model].daily[date] || 0) + tokens;
+                        }
+                    }
+                }
+            }
+
+            // Trend Chart
+            if (selectedRange === 'today') {
+                const hours = Array.from({length: 24}, (_, i) => i);
+                const series = [];
+                for (const model in modelData) {
+                    const data = hours.map(h => modelData[model].hourly[h] || 0);
+                    series.push({
+                        name: displayModelName(model),
+                        type: 'line',
+                        smooth: true,
+                        data,
+                        itemStyle: { color: getModelColor(model) },
+                        areaStyle: { opacity: 0.1 }
+                    });
+                }
+                trendChart.setOption({
+                    title: { text: 'Hourly Token Usage', textStyle: { color: '#9ca3af', fontSize: 12 } },
+                    tooltip: { trigger: 'axis', formatter: p => p.map(s => `${s.marker}${s.seriesName}: ${fmtTokens(s.value)}`).join('<br/>') },
+                    legend: { show: false },
+                    grid: { left: 50, right: 20, top: 40, bottom: 30 },
+                    xAxis: { type: 'category', data: hours.map(h => h + 'h'), axisLabel: { color: '#6b7280' } },
+                    yAxis: { type: 'value', axisLabel: { color: '#6b7280', formatter: v => fmtTokens(v) } },
+                    series
+                }, true);
+            } else {
+                const dailySeries = [];
+                for (const model in modelData) {
+                    const data = dates.map(d => modelData[model].daily[d] || 0);
+                    dailySeries.push({
+                        name: displayModelName(model),
+                        type: 'line',
+                        smooth: true,
+                        data,
+                        itemStyle: { color: getModelColor(model) },
+                        areaStyle: { opacity: 0.1 }
+                    });
+                }
+                trendChart.setOption({
+                    title: { text: 'Daily Token Usage', textStyle: { color: '#9ca3af', fontSize: 12 } },
+                    tooltip: { trigger: 'axis', formatter: p => p.map(s => `${s.marker}${s.seriesName}: ${fmtTokens(s.value)}`).join('<br/>') },
+                    legend: { show: false },
+                    grid: { left: 50, right: 20, top: 40, bottom: 30 },
+                    xAxis: { type: 'category', data: dates.map(d => d.slice(5)), axisLabel: { color: '#6b7280' } },
+                    yAxis: { type: 'value', axisLabel: { color: '#6b7280', formatter: v => fmtTokens(v) } },
+                    series: dailySeries
+                }, true);
+            }
+
+            // Pie Chart
+            const pieData = Object.entries(modelData).map(([model, data]) => ({
+                name: displayModelName(model),
+                value: data.total,
+                itemStyle: { color: getModelColor(model) },
+                requests: data.requests,
+                cost: data.cost
+            })).sort((a, b) => b.value - a.value);
+
+            pieChart.setOption({
+                title: { text: 'Model Distribution', textStyle: { color: '#9ca3af', fontSize: 11 }, top: 0, left: 0 },
+                tooltip: { trigger: 'item', formatter: p => `${p.marker}${p.name}: ${fmtTokens(p.value)} (${p.percent.toFixed(1)}%)` },
+                series: [{
+                    type: 'pie',
+                    radius: ['36%', '75%'],
+                    center: ['50%', '57%'],
+                    data: pieData,
+                    label: { show: false }
+                }]
+            });
+
+            // Pie Legend
+            const legendEl = document.getElementById('pieLegend');
+            legendEl.innerHTML = pieData.map(d => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div style="width:10px;height:10px;background:${d.itemStyle.color};border-radius:2px;"></div>
+                        <span style="color:#d1d5db;">${d.name}</span>
+                    </div>
+                    <div style="display:flex;gap:8px;font-family:'JetBrains Mono',monospace;font-size:0.7rem;">
+                        <span style="color:#6b7280;">${d.requests > 0 ? d.requests + ' req' : '—'}</span>
+                        <span style="color:#9ca3af;">${fmtTokens(d.value)}</span>
+                        <span style="color:#34d399;">${fmtCost(d.cost)}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            // 图例渲染后重新测量高度，让饼图自适应剩余空间
+            requestAnimationFrame(() => { if (pieChart) pieChart.resize(); });
+        }
+
+        function scheduleChartUpdate() {
+            if (chartUpdateTimeout) clearTimeout(chartUpdateTimeout);
+            chartUpdateTimeout = setTimeout(updateCharts, 2000);
+        }
+
+        function toggleSection(name) {
+            const content = document.getElementById(name + 'Content');
+            const chevron = content.previousElementSibling.querySelector('.collapse-chevron');
+
+            if (content.classList.contains('collapsed')) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                content.classList.remove('collapsed');
+                chevron.classList.remove('rotated');
+
+                // 展开图表区域时初始化（首次）并 resize
+                if (name === 'analytics') {
+                    setTimeout(() => {
+                        initCharts();
+                        updateCharts();
+                        trendChart.resize();
+                        pieChart.resize();
+                    }, 300);
+                }
+            } else {
+                content.style.maxHeight = '0';
+                content.classList.add('collapsed');
+                chevron.classList.add('rotated');
+            }
+        }
+
+        logsEl.addEventListener('scroll', () => {
+            autoScroll = logsEl.scrollHeight - logsEl.scrollTop <= logsEl.clientHeight + 50;
+        });
+
+        function appendLog(level, message, reqId) {
+            const div = document.createElement('div');
+            div.className = 'mb-0.5 leading-relaxed';
+
+            const t = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const timeHtml = `<span style="color:#374151;">[${t}]</span>`;
+            const idStr = reqId ? `<span style="color:#6366f1;">[${reqId}]</span> ` : '';
+
+            let colorStyle = 'color:#9ca3af;';
+            if (level === 'error' || level === 'fatal') colorStyle = 'color:#ef4444;';
+            else if (level === 'warn') colorStyle = 'color:#f59e0b;';
+            else if (message.includes('✅')) colorStyle = 'color:#10b981;';
+            else if (message.includes('📥')) colorStyle = 'color:#60a5fa;';
+
+            div.innerHTML = `${timeHtml} ${idStr}<span style="${colorStyle}">${message}</span>`;
+            logsEl.appendChild(div);
+
+            if (autoScroll) logsEl.scrollTop = logsEl.scrollHeight;
+
+            while (logsEl.childNodes.length > 200) {
+                logsEl.removeChild(logsEl.firstChild);
+            }
+        }
+
+        function connectSSE() {
+            const evtSource = new EventSource('/stream');
+
+            evtSource.onopen = () => {
+                connStatusEl.innerHTML = '<span style="color:#10b981;display:flex;align-items:center;gap:5px;"><span style="width:6px;height:6px;background:#10b981;border-radius:50%;display:inline-block;"></span>Live</span>';
+            };
+            evtSource.onerror = () => {
+                connStatusEl.innerHTML = '<span style="color:#ef4444;display:flex;align-items:center;gap:5px;"><span style="width:6px;height:6px;background:#ef4444;border-radius:50%;display:inline-block;"></span>Disconnected</span>';
+            };
+
+            evtSource.addEventListener('log', (e) => {
+                const data = JSON.parse(e.data);
+                appendLog(data.level, data.message, data.reqId);
+            });
+
+            evtSource.addEventListener('stats_update', (e) => {
+                const data = JSON.parse(e.data);
+                if (!allStats[data.date]) allStats[data.date] = {};
+                if (!allStats[data.date][data.provider]) allStats[data.date][data.provider] = {};
+                allStats[data.date][data.provider][data.model] = data.stats;
+
+                if (!globalStats[data.provider]) globalStats[data.provider] = {};
+                globalStats[data.provider][data.model] = data.stats;
+                lastUpdateTime[`${data.model}__${data.provider}`] = Date.now();
+
+                if (data.spark) sparklines[`${data.model}__${data.provider}`] = data.spark;
+
+                renderStats();
+                updateSummaryStats();
+                updateProviderPills();
+                scheduleChartUpdate();
+
+                // Flash + spark animation
+                const row = document.querySelector(`tr[data-model-key="${data.model}__${data.provider}"]`);
+                if (row) {
+                    row.classList.add('flash-row');
+                    row.addEventListener('animationend', () => row.classList.remove('flash-row'), { once: true });
+                    const sparkCell = row.querySelector('.col-spark');
+                    if (sparkCell) {
+                        sparkCell.classList.add('spark-animate');
+                        setTimeout(() => sparkCell.classList.remove('spark-animate'), 700);
+                    }
+                }
+
+                if (data.velocity) {
+                    document.getElementById('velMin').textContent = fmtTokens(data.velocity.tokensPerMin);
+                    document.getElementById('velHour').textContent = fmtTokens(data.velocity.tokensPerHour);
+                }
+            });
+
+            evtSource.addEventListener('velocity_update', (e) => {
+                const data = JSON.parse(e.data);
+                document.getElementById('velMin').textContent = fmtTokens(data.tokensPerMin);
+                document.getElementById('velHour').textContent = fmtTokens(data.tokensPerHour);
+            });
+
+            evtSource.addEventListener('provider_status', (e) => {
+                const data = JSON.parse(e.data);
+                activeProviders[`${data.group}_${data.provider}`] = data;
+                updateProviderPills();
+            });
+
+            fetch('/api/init-state')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.discounts) providerDiscounts = data.discounts;
+                    if (data.sparklines) sparklines = data.sparklines;
+                    if (data.stats) {
+                        allStats = data.stats;
+                        const today = data.today || localDateStr();
+                        globalStats = allStats[today] || {};
+                        renderStats();
+                        updateSummaryStats();
+                    }
+                    if (data.providers) {
+                        activeProviders = data.providers;
+                        updateProviderPills();
+                    }
+                    if (data.velocity) {
+                        document.getElementById('velMin').textContent = fmtTokens(data.velocity.tokensPerMin);
+                        document.getElementById('velHour').textContent = fmtTokens(data.velocity.tokensPerHour);
+                    }
+
+                    // 图表延迟初始化，等展开时再 init（避免折叠状态下 canvas 撑开页面宽度）
+                    chartsReady = false;
+                    updateCharts();
+                })
+                .catch(() => {});
+        }
+
+        // Time selector
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedRange = btn.dataset.range;
+                updateSummaryStats();
+                updateProviderPills();
+                updateCharts();
+                renderStats();
+            });
+        });
+
+        setInterval(updateProviderPills, 1000);
+        connectSSE();
+    </script>
+</body>
+</html>

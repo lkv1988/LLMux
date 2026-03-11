@@ -1,0 +1,13 @@
+config.json
+*.jsonl
+token_stats.json
+logs/
+.worktrees/
+.claude/
+.playwright-mcp/
+*.bak
+*.png
+.DS_Store
+node_modules/
+migrate_stats.js
+docs/
