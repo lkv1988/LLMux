@@ -32,7 +32,7 @@ Request Patching    ·  JSONL Traffic Logs
 
 ## Dashboard
 
-![LLMux Dashboard](./assets/dashboard-screenshot.png)
+<img src="./assets/dashboard-screenshot.png" alt="LLMux Dashboard" width="350px">
 
 The dashboard shows:
 - Summary cards: total requests, cumulative cost, average TTFB
