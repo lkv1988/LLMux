@@ -275,7 +275,8 @@ function getAllSparklines() {
     const dunder = key.indexOf('__');
     const provider = key.slice(0, dunder);
     const model = key.slice(dunder + 2);
-    result[key] = getSparkline(provider, model);
+    // 前端期望的键格式是 model__provider
+    result[`${model}__${provider}`] = getSparkline(provider, model);
   }
   return result;
 }
@@ -283,7 +284,10 @@ function getAllSparklines() {
 loadStats();
 
 setInterval(() => {
-  proxyEvents.emit('velocity_update', calculateVelocity());
+  proxyEvents.emit('velocity_update', {
+    ...calculateVelocity(),
+    sparklines: getAllSparklines()
+  });
 }, 5000);
 
 // ==========================================

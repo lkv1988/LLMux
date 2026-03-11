@@ -922,6 +922,11 @@
                 const data = JSON.parse(e.data);
                 document.getElementById('velMin').textContent = fmtTokens(data.tokensPerMin);
                 document.getElementById('velHour').textContent = fmtTokens(data.tokensPerHour);
+                // 更新 sparklines 并重新渲染
+                if (data.sparklines) {
+                    sparklines = data.sparklines;
+                    renderStats();
+                }
             });
 
             evtSource.addEventListener('provider_status', (e) => {
