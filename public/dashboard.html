@@ -189,7 +189,7 @@
 
         /* 窄屏隐藏表格列 + 紧凑化 */
         @media (max-width: 767px) {
-            .col-cache, .col-hit { display: none; }
+            .col-cache, .col-hit, .col-req { display: none; }
             #statsTable th, #statsTable td { padding: 5px 6px; font-size: 0.68rem; }
             #statsTable td:first-child { font-size: 0.72rem; }
             .vel-pill { padding: 1px 6px; font-size: 0.65rem; }
@@ -271,6 +271,7 @@
                     <tr>
                         <th>Model</th>
                         <th class="col-spark" style="width:90px">Activity</th>
+                        <th class="col-req">Requests</th>
                         <th>Input</th>
                         <th>Output</th>
                         <th class="col-cache" title="Cache Creation / Cache Read">Cache ↑/↓</th>
@@ -281,7 +282,7 @@
                 </thead>
                 <tbody id="statsBody">
                     <tr>
-                        <td colspan="8" style="text-align:center; font-family:'DM Sans',sans-serif; color:#4b5563; font-style:italic;">No data yet...</td>
+                        <td colspan="9" style="text-align:center; font-family:'DM Sans',sans-serif; color:#4b5563; font-style:italic;">No data yet...</td>
                     </tr>
                 </tbody>
             </table>
@@ -553,19 +554,20 @@
                     if (!aggregated[provider]) aggregated[provider] = {};
                     for (const model in allStats[date][provider]) {
                         if (!aggregated[provider][model]) {
-                            aggregated[provider][model] = { total_input: 0, total_output: 0, cache_read: 0, cache_creation: 0 };
+                            aggregated[provider][model] = { total_input: 0, total_output: 0, cache_read: 0, cache_creation: 0, request_count: 0 };
                         }
                         const s = allStats[date][provider][model];
                         aggregated[provider][model].total_input += s.total_input || 0;
                         aggregated[provider][model].total_output += s.total_output || 0;
                         aggregated[provider][model].cache_read += s.cache_read || 0;
                         aggregated[provider][model].cache_creation += s.cache_creation || 0;
+                        aggregated[provider][model].request_count += s.request_count || 0;
                     }
                 }
             }
 
             const rows = [];
-            const totals = { inp: 0, out: 0, cr: 0, cc: 0, cost: 0 };
+            const totals = { inp: 0, out: 0, cr: 0, cc: 0, cost: 0, requests: 0 };
 
             for (const providerName in aggregated) {
                 for (const modelName in aggregated[providerName]) {
@@ -574,6 +576,7 @@
                     const out = s.total_output;
                     const cr = s.cache_read;
                     const cc = s.cache_creation;
+                    const requests = s.request_count || 0;
                     const hitPct = (inp + cr + cc) > 0 ? cr / (inp + cr + cc) * 100 : 0;
                     const refCost = calcCost(inp, out, cr, cc, modelName);
                     const discount = getDiscount(providerName, modelName);
@@ -581,7 +584,8 @@
                     const total = inp + out + cr + cc;
                     totals.inp += inp; totals.out += out; totals.cr += cr; totals.cc += cc;
                     totals.cost += actualCost;
-                    rows.push({ provider: providerName, model: modelName, inp, out, cr, cc, hitPct, total, actualCost, discount });
+                    totals.requests += requests;
+                    rows.push({ provider: providerName, model: modelName, inp, out, cr, cc, requests, hitPct, total, actualCost, discount });
                 }
             }
 
@@ -596,7 +600,7 @@
             });
 
             if (rows.length === 0) {
-                statsBodyEl.innerHTML = `<tr><td colspan="8" style="text-align:center;font-family:'DM Sans',sans-serif;color:#4b5563;font-style:italic;padding:12px;">No data yet...</td></tr>`;
+                statsBodyEl.innerHTML = `<tr><td colspan="9" style="text-align:center;font-family:'DM Sans',sans-serif;color:#4b5563;font-style:italic;padding:12px;">No data yet...</td></tr>`;
                 return;
             }
 
@@ -637,6 +641,7 @@
                 tr.innerHTML = `
                     <td><div style="color:#d1d5db;">${displayName}${discountText}</div><div style="font-size:0.6rem;color:#4b5563;">${r.provider}</div></td>
                     <td class="col-spark">${buildSparklineSVG(sparklines[key] || new Array(activityConfig.bucketCount).fill(0))}</td>
+                    <td class="col-req">${r.requests.toLocaleString()}</td>
                     <td>${fmtTokens(r.inp)}</td>
                     <td>${fmtTokens(r.out)}</td>
                     <td class="col-cache"><span class="hit-yellow">↑${fmtTokens(r.cc)}</span> / <span class="hit-green">↓${fmtTokens(r.cr)}</span></td>
@@ -658,6 +663,7 @@
             totalTr.innerHTML = `
                 <td>All Total</td>
                 <td class="col-spark"></td>
+                <td class="col-req">${totals.requests.toLocaleString()}</td>
                 <td>${fmtTokens(totals.inp)}</td>
                 <td>${fmtTokens(totals.out)}</td>
                 <td class="col-cache"><span class="hit-yellow">↑${fmtTokens(totals.cc)}</span> / <span class="hit-green">↓${fmtTokens(totals.cr)}</span></td>
