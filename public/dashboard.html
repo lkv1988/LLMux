@@ -740,11 +740,11 @@
                         type: 'line',
                         smooth: true,
                         data,
-                        itemStyle: { color: getModelColor(model) },
-                        areaStyle: { opacity: 0.1 }
+                        itemStyle: { color: getModelColor(model) }
                     });
                 }
                 trendChart.setOption({
+                    backgroundColor: 'transparent',
                     title: { text: 'Hourly Token Usage', textStyle: { color: '#9ca3af', fontSize: 12 } },
                     tooltip: { trigger: 'axis', formatter: p => p.map(s => `${s.marker}${s.seriesName}: ${fmtTokens(s.value)}`).join('<br/>') },
                     legend: { show: false },
@@ -762,11 +762,11 @@
                         type: 'line',
                         smooth: true,
                         data,
-                        itemStyle: { color: getModelColor(model) },
-                        areaStyle: { opacity: 0.1 }
+                        itemStyle: { color: getModelColor(model) }
                     });
                 }
                 trendChart.setOption({
+                    backgroundColor: 'transparent',
                     title: { text: 'Daily Token Usage', textStyle: { color: '#9ca3af', fontSize: 12 } },
                     tooltip: { trigger: 'axis', formatter: p => p.map(s => `${s.marker}${s.seriesName}: ${fmtTokens(s.value)}`).join('<br/>') },
                     legend: { show: false },

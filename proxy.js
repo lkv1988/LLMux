@@ -811,6 +811,30 @@ function startServer(port) {
     console.log(`\x1b[36mAPI Key:  sk-ant-dummy-placeholder-key (or any valid format)\x1b[0m`);
     console.log(`===================================================`);
     console.log(`⏳ Waiting for client requests...`);
+
+    // Auto-open dashboard in Chrome app mode (macOS only)
+    if (process.platform === 'darwin') {
+      const { exec } = require('child_process');
+      const dashUrl = `http://localhost:${port}/dashboard`;
+
+      // Check if dashboard is already open
+      exec(`osascript -e 'tell application "Google Chrome" to get title of every tab of every window' 2>/dev/null`, (checkErr, stdout) => {
+        if (stdout && stdout.includes('LLMux Dashboard')) {
+          console.log(`📊 LLMux Dashboard already open`);
+          return;
+        }
+
+        // Open in Chrome app mode
+        exec(`/usr/bin/open -na "Google Chrome" --args --app="${dashUrl}"`, (openErr, openStdout, openStderr) => {
+          if (openErr) {
+            console.log(`📊 Chrome app mode failed, opening in default browser...`);
+            exec(`open "${dashUrl}"`);
+          } else {
+            console.log(`📊 LLMux Dashboard opened in Chrome app mode`);
+          }
+        });
+      });
+    }
   });
 
   server.on('error', (err) => {

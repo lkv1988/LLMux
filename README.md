@@ -37,11 +37,11 @@ Request Patching    ·  JSONL Traffic Logs
 The dashboard shows:
 - Summary cards: total requests, cumulative cost, average TTFB
 - Provider status: live health indicators with cooldown timers
-- Token usage table: per-model stats with 30-minute sparkline activity graphs
+- Token usage table: per-model stats with configurable-window sparkline activity graphs (default 4-hour)
 - Charts: hourly/daily token trends, model distribution pie chart, cache hit rate comparison
 - Time range selector: today / 7 days / 30 days
 
-Access at `http://localhost:34250/dashboard` after starting the proxy.
+Access at `http://localhost:34250/dashboard` after starting the proxy. On macOS, the dashboard automatically opens in Chrome app mode (independent window) when the proxy starts.
 
 ---
 
@@ -104,7 +104,7 @@ The API key can be any valid format—the proxy ignores it and uses keys from `c
 
 ### 4. Open the dashboard
 
-Navigate to `http://localhost:34250/dashboard` to watch requests flow in real-time.
+On macOS, the dashboard automatically opens in Chrome app mode when the proxy starts. Otherwise, navigate to `http://localhost:34250/dashboard` to watch requests flow in real-time.
 
 ---
 
@@ -151,6 +151,9 @@ This lets the dashboard show accurate cost comparisons between providers.
 | `cooldownMinutes` | number | 5 | Circuit breaker cooldown duration |
 | `maxAttemptsPerProvider` | number | 3 | Retry attempts per provider before failover |
 | `ttfbTimeoutMs` | number | 60000 | Time To First Byte timeout (ms) |
+| `activity.windowMinutes` | number | 240 | Activity sparkline time window (minutes) |
+| `activity.bucketMinutes` | number | 10 | Activity data bucket size (minutes) |
+| `activity.pushIntervalMs` | number | 5000 | Activity data push interval to dashboard (ms) |
 
 **Provider fields:**
 
@@ -198,10 +201,10 @@ The dashboard answers questions your API bill can't:
 - Average TTFB per provider—identify slow endpoints before they block your workflow
 
 **What's my current velocity?**
-- Tokens/minute and tokens/hour—track burst activity during heavy coding sessions
+- Tokens per bucket and per window—track burst activity during heavy coding sessions (configurable time windows)
 
 **Activity patterns:**
-- 30-minute sparkline graphs per model—visualize request distribution over time
+- Configurable-window sparkline graphs per model (default 4-hour)—visualize request distribution over time
 - Hourly trend charts—identify peak usage hours
 
 All data updates in real-time via Server-Sent Events (SSE). No polling, no refresh needed.
@@ -215,7 +218,7 @@ All data updates in real-time via Server-Sent Events (SSE). No polling, no refre
 - **Frontend Dependencies**: ECharts (charts), Tailwind CSS (styling), loaded via CDN
 - **Requirements**: Node.js >= 18
 - **Logs**: Daily JSONL files in `logs/` directory, auto-cleaned after 15 days
-- **Stats persistence**: Token statistics saved to `token_stats.json` (debounced writes every 2s)
+- **Stats persistence**: Token statistics saved to `data/token_stats.json` (debounced writes every 2s); activity data saved to `data/activity_data.json` (persisted on shutdown)
 - **Port handling**: Auto-increments if default port (34250) is occupied
 
 ---
