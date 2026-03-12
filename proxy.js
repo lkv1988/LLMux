@@ -333,6 +333,8 @@ function calculateVelocity() {
   return {
     tokensPerBucket: tokensLastBucket,
     tokensPerWindow: tokensLastWindow,
+    tokensPerMinute: Math.round(tokensLastBucket / ACT_BUCKET_MIN),
+    tokensPerHour: Math.round(tokensLastWindow / (ACT_WINDOW_MIN / 60)),
     bucketMinutes: ACT_BUCKET_MIN,
     windowMinutes: ACT_WINDOW_MIN
   };

@@ -227,10 +227,10 @@
             <div id="connectionStatus" class="text-xs text-warning">Connecting...</div>
             <div class="header-divider h-4 w-px bg-gray-800"></div>
             <span class="vel-pill" style="background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.2); color: #22d3ee;">
-                ⚡ <span id="velBucket">0</span>/<span id="velBucketLabel">5min</span>
+                ⚡ <span id="velBucket">0</span>/<span id="velBucketLabel">min</span>
             </span>
             <span class="vel-pill" style="background: rgba(34,211,238,0.04); border: 1px solid rgba(34,211,238,0.1); color: #67e8f9;">
-                <span id="velWindow">0</span>/<span id="velWindowLabel">4hr</span>
+                <span id="velWindow">0</span>/<span id="velWindowLabel">hr</span>
             </span>
         </div>
     </header>
@@ -927,15 +927,15 @@
                 }
 
                 if (data.velocity) {
-                    document.getElementById('velBucket').textContent = fmtTokens(data.velocity.tokensPerBucket);
-                    document.getElementById('velWindow').textContent = fmtTokens(data.velocity.tokensPerWindow);
+                    document.getElementById('velBucket').textContent = fmtTokens(data.velocity.tokensPerMinute);
+                    document.getElementById('velWindow').textContent = fmtTokens(data.velocity.tokensPerHour);
                 }
             });
 
             evtSource.addEventListener('velocity_update', (e) => {
                 const data = JSON.parse(e.data);
-                document.getElementById('velBucket').textContent = fmtTokens(data.tokensPerBucket);
-                document.getElementById('velWindow').textContent = fmtTokens(data.tokensPerWindow);
+                document.getElementById('velBucket').textContent = fmtTokens(data.tokensPerMinute);
+                document.getElementById('velWindow').textContent = fmtTokens(data.tokensPerHour);
                 // 更新 sparklines 并重新渲染
                 if (data.sparklines) {
                     sparklines = data.sparklines;
@@ -954,8 +954,6 @@
                 .then(data => {
                     if (data.activityConfig) {
                         activityConfig = data.activityConfig;
-                        document.getElementById('velBucketLabel').textContent = fmtTimeLabel(activityConfig.bucketMinutes);
-                        document.getElementById('velWindowLabel').textContent = fmtTimeLabel(activityConfig.windowMinutes);
                     }
                     if (data.discounts) providerDiscounts = data.discounts;
                     if (data.sparklines) sparklines = data.sparklines;
@@ -971,8 +969,8 @@
                         updateProviderPills();
                     }
                     if (data.velocity) {
-                        document.getElementById('velBucket').textContent = fmtTokens(data.velocity.tokensPerBucket);
-                        document.getElementById('velWindow').textContent = fmtTokens(data.velocity.tokensPerWindow);
+                        document.getElementById('velBucket').textContent = fmtTokens(data.velocity.tokensPerMinute);
+                        document.getElementById('velWindow').textContent = fmtTokens(data.velocity.tokensPerHour);
                     }
 
                     // 图表延迟初始化，等展开时再 init（避免折叠状态下 canvas 撑开页面宽度）
