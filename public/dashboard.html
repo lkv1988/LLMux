@@ -227,10 +227,10 @@
             <div id="connectionStatus" class="text-xs text-warning">Connecting...</div>
             <div class="header-divider h-4 w-px bg-gray-800"></div>
             <span class="vel-pill" style="background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.2); color: #22d3ee;">
-                ⚡ <span id="velMin">0</span>/min
+                ⚡ <span id="velBucket">0</span>/<span id="velBucketLabel">5min</span>
             </span>
             <span class="vel-pill" style="background: rgba(34,211,238,0.04); border: 1px solid rgba(34,211,238,0.1); color: #67e8f9;">
-                <span id="velHour">0</span>/hr
+                <span id="velWindow">0</span>/<span id="velWindowLabel">4hr</span>
             </span>
         </div>
     </header>
@@ -347,6 +347,7 @@
         let activeProviders = {};
         let providerDiscounts = {};
         let sparklines = {};
+        let activityConfig = { windowMinutes: 240, bucketMinutes: 5, bucketCount: 48, pushIntervalMs: 5000 };
         let selectedRange = 'today';
         let autoScroll = true;
         let trendChart, pieChart;
@@ -384,6 +385,13 @@
             if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
             if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
             return n.toString();
+        }
+
+        function fmtTimeLabel(minutes) {
+            if (minutes < 60) return `${minutes}min`;
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return mins > 0 ? `${hours}h${mins}m` : `${hours}hr`;
         }
 
         function displayModelName(name) {
@@ -483,7 +491,7 @@
         }
 
         function buildSparklineSVG(data30) {
-            const w = 80, h = 24, pts = data30.length === 30 ? data30 : new Array(30).fill(0);
+            const w = 80, h = 24, pts = data30.length === activityConfig.bucketCount ? data30 : new Array(activityConfig.bucketCount).fill(0);
             const maxVal = Math.max(...pts, 1);
             const allZero = pts.every(v => v === 0);
             if (allZero) {
@@ -628,7 +636,7 @@
                 })();
                 tr.innerHTML = `
                     <td><div style="color:#d1d5db;">${displayName}${discountText}</div><div style="font-size:0.6rem;color:#4b5563;">${r.provider}</div></td>
-                    <td class="col-spark">${buildSparklineSVG(sparklines[key] || new Array(30).fill(0))}</td>
+                    <td class="col-spark">${buildSparklineSVG(sparklines[key] || new Array(activityConfig.bucketCount).fill(0))}</td>
                     <td>${fmtTokens(r.inp)}</td>
                     <td>${fmtTokens(r.out)}</td>
                     <td class="col-cache"><span class="hit-yellow">↑${fmtTokens(r.cc)}</span> / <span class="hit-green">↓${fmtTokens(r.cr)}</span></td>
@@ -913,15 +921,15 @@
                 }
 
                 if (data.velocity) {
-                    document.getElementById('velMin').textContent = fmtTokens(data.velocity.tokensPerMin);
-                    document.getElementById('velHour').textContent = fmtTokens(data.velocity.tokensPerHour);
+                    document.getElementById('velBucket').textContent = fmtTokens(data.velocity.tokensPerBucket);
+                    document.getElementById('velWindow').textContent = fmtTokens(data.velocity.tokensPerWindow);
                 }
             });
 
             evtSource.addEventListener('velocity_update', (e) => {
                 const data = JSON.parse(e.data);
-                document.getElementById('velMin').textContent = fmtTokens(data.tokensPerMin);
-                document.getElementById('velHour').textContent = fmtTokens(data.tokensPerHour);
+                document.getElementById('velBucket').textContent = fmtTokens(data.tokensPerBucket);
+                document.getElementById('velWindow').textContent = fmtTokens(data.tokensPerWindow);
                 // 更新 sparklines 并重新渲染
                 if (data.sparklines) {
                     sparklines = data.sparklines;
@@ -938,6 +946,11 @@
             fetch('/api/init-state')
                 .then(res => res.json())
                 .then(data => {
+                    if (data.activityConfig) {
+                        activityConfig = data.activityConfig;
+                        document.getElementById('velBucketLabel').textContent = fmtTimeLabel(activityConfig.bucketMinutes);
+                        document.getElementById('velWindowLabel').textContent = fmtTimeLabel(activityConfig.windowMinutes);
+                    }
                     if (data.discounts) providerDiscounts = data.discounts;
                     if (data.sparklines) sparklines = data.sparklines;
                     if (data.stats) {
@@ -952,8 +965,8 @@
                         updateProviderPills();
                     }
                     if (data.velocity) {
-                        document.getElementById('velMin').textContent = fmtTokens(data.velocity.tokensPerMin);
-                        document.getElementById('velHour').textContent = fmtTokens(data.velocity.tokensPerHour);
+                        document.getElementById('velBucket').textContent = fmtTokens(data.velocity.tokensPerBucket);
+                        document.getElementById('velWindow').textContent = fmtTokens(data.velocity.tokensPerWindow);
                     }
 
                     // 图表延迟初始化，等展开时再 init（避免折叠状态下 canvas 撑开页面宽度）

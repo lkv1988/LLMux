@@ -1,6 +1,5 @@
 config.json
-*.jsonl
-token_stats.json
+data/
 logs/
 .worktrees/
 .claude/

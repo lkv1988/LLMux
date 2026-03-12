@@ -27,10 +27,25 @@ function loadConfig() {
   }
 }
 
+let ACT_WINDOW_MIN = 240;
+let ACT_BUCKET_MIN = 5;
+let ACT_BUCKET_COUNT = 48;
+let ACT_PUSH_INTERVAL = 5000;
+
+function applyActivityConfig() {
+  const actCfg = config.activity || {};
+  ACT_WINDOW_MIN = actCfg.windowMinutes || 240;
+  ACT_BUCKET_MIN = actCfg.bucketMinutes || 5;
+  ACT_BUCKET_COUNT = Math.floor(ACT_WINDOW_MIN / ACT_BUCKET_MIN);
+  ACT_PUSH_INTERVAL = actCfg.pushIntervalMs || 5000;
+  console.log(`📊 Activity config: window=${ACT_WINDOW_MIN}min, bucket=${ACT_BUCKET_MIN}min, count=${ACT_BUCKET_COUNT}, push=${ACT_PUSH_INTERVAL}ms`);
+}
+
 // Initial config load
 if (!loadConfig()) {
   process.exit(1);
 }
+applyActivityConfig();
 
 // Watch config file changes (hot reload)
 fs.watch(configPath, (eventType, filename) => {
@@ -40,6 +55,14 @@ fs.watch(configPath, (eventType, filename) => {
       if (loadConfig()) {
         console.log('🧹 Config updated, clearing all provider cooldown records...');
         cooldowns.clear();
+        const prevBucket = ACT_BUCKET_MIN;
+        const prevWindow = ACT_WINDOW_MIN;
+        applyActivityConfig();
+        if (ACT_BUCKET_MIN !== prevBucket || ACT_WINDOW_MIN !== prevWindow) {
+          Object.keys(sparklineData).forEach(key => delete sparklineData[key]);
+          tokenEventsQueue.length = 0;
+          try { fs.unlinkSync(activityDataPath); } catch (e) {}
+        }
       }
     }, 100);
   }
@@ -134,9 +157,17 @@ function setProviderCooldown(groupKey, providerName) {
 // ==========================================
 // Token statistics + persistent storage (date > provider > model)
 // ==========================================
-const tokenStatsPath = path.join(__dirname, 'token_stats.json');
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const tokenStatsPath = path.join(dataDir, 'token_stats.json');
 let TokenStats = {};
 let saveTimeout = null;
+
+const activityDataPath = path.join(dataDir, 'activity_data.json');
+let activitySaveTimeout = null;
 
 // Velocity queue: each element { ts: timestamp, count: tokens }
 const tokenEventsQueue = [];
@@ -166,6 +197,50 @@ function saveStats() {
       console.error(`❌ Failed to write token_stats.json: ${err.message}`);
     }
   }, 2000);
+}
+
+function saveActivityData() {
+  if (activitySaveTimeout) clearTimeout(activitySaveTimeout);
+  activitySaveTimeout = setTimeout(() => {
+    try {
+      fs.writeFileSync(activityDataPath, JSON.stringify({
+        config: { windowMinutes: ACT_WINDOW_MIN, bucketMinutes: ACT_BUCKET_MIN },
+        tokenEventsQueue,
+        sparklineData
+      }), 'utf8');
+    } catch (err) {
+      console.error(`❌ Failed to write activity_data.json: ${err.message}`);
+    }
+  }, 5000);
+}
+
+function loadActivityData() {
+  try {
+    if (!fs.existsSync(activityDataPath)) return;
+    const data = JSON.parse(fs.readFileSync(activityDataPath, 'utf8'));
+    const savedCfg = data.config || {};
+    if (savedCfg.bucketMinutes !== ACT_BUCKET_MIN || savedCfg.windowMinutes !== ACT_WINDOW_MIN) {
+      console.log('📊 Activity config changed, discarding persisted data');
+      try { fs.unlinkSync(activityDataPath); } catch (e) {}
+      return;
+    }
+    const windowAgo = Date.now() - ACT_WINDOW_MIN * 60000;
+    if (Array.isArray(data.tokenEventsQueue)) {
+      tokenEventsQueue.push(...data.tokenEventsQueue.filter(e => e.ts >= windowAgo));
+    }
+    if (data.sparklineData && typeof data.sparklineData === 'object') {
+      const now = Math.floor(Date.now() / (ACT_BUCKET_MIN * 60000));
+      const cutoff = now - ACT_BUCKET_COUNT;
+      for (const [key, buckets] of Object.entries(data.sparklineData)) {
+        if (!Array.isArray(buckets)) continue;
+        const valid = buckets.filter(b => b.bucket >= cutoff);
+        if (valid.length > 0) sparklineData[key] = valid;
+      }
+    }
+    console.log(`📊 Activity data restored: ${tokenEventsQueue.length} events, ${Object.keys(sparklineData).length} series`);
+  } catch (err) {
+    console.error(`❌ Failed to load activity_data.json: ${err.message}`);
+  }
 }
 
 function updateTokenStats(providerName, model, usage, ttfbMs) {
@@ -208,20 +283,21 @@ function updateTokenStats(providerName, model, usage, ttfbMs) {
     tokenEventsQueue.push({ ts: Date.now(), count: activeTokens });
   }
 
-  // Sparkline recording (minute-level buckets, keep last 30 minutes)
+  // Sparkline recording (bucket-level, keep last N buckets)
   const sparkKey = `${providerName}__${model}`;
-  const minuteBucket = Math.floor(Date.now() / 60000);
+  const bucket = Math.floor(Date.now() / (ACT_BUCKET_MIN * 60000));
   if (!sparklineData[sparkKey]) sparklineData[sparkKey] = [];
   const buckets = sparklineData[sparkKey];
-  if (buckets.length > 0 && buckets[buckets.length - 1].minute === minuteBucket) {
+  if (buckets.length > 0 && buckets[buckets.length - 1].bucket === bucket) {
     buckets[buckets.length - 1].count++;
   } else {
-    buckets.push({ minute: minuteBucket, count: 1 });
+    buckets.push({ bucket: bucket, count: 1 });
   }
-  const cutoff = minuteBucket - 30;
-  while (buckets.length > 0 && buckets[0].minute < cutoff) buckets.shift();
+  const cutoff = bucket - ACT_BUCKET_COUNT;
+  while (buckets.length > 0 && buckets[0].bucket < cutoff) buckets.shift();
 
   saveStats();
+  saveActivityData();
 
   proxyEvents.emit('stats_update', {
     date: today,
@@ -235,36 +311,41 @@ function updateTokenStats(providerName, model, usage, ttfbMs) {
 
 function calculateVelocity() {
   const now = Date.now();
-  const oneMinAgo = now - 60 * 1000;
-  const oneHourAgo = now - 60 * 60 * 1000;
+  const bucketAgo = now - ACT_BUCKET_MIN * 60000;
+  const windowAgo = now - ACT_WINDOW_MIN * 60000;
 
-  // Clean up data older than 1 hour
-  while (tokenEventsQueue.length > 0 && tokenEventsQueue[0].ts < oneHourAgo) {
+  // Clean up data older than window
+  while (tokenEventsQueue.length > 0 && tokenEventsQueue[0].ts < windowAgo) {
     tokenEventsQueue.shift();
   }
 
-  let tokensLastMin = 0;
-  let tokensLastHour = 0;
+  let tokensLastBucket = 0;
+  let tokensLastWindow = 0;
 
   for (let i = tokenEventsQueue.length - 1; i >= 0; i--) {
     const event = tokenEventsQueue[i];
-    if (event.ts >= oneMinAgo) {
-      tokensLastMin += event.count;
+    if (event.ts >= bucketAgo) {
+      tokensLastBucket += event.count;
     }
-    tokensLastHour += event.count;
+    tokensLastWindow += event.count;
   }
 
-  return { tokensPerMin: tokensLastMin, tokensPerHour: tokensLastHour };
+  return {
+    tokensPerBucket: tokensLastBucket,
+    tokensPerWindow: tokensLastWindow,
+    bucketMinutes: ACT_BUCKET_MIN,
+    windowMinutes: ACT_WINDOW_MIN
+  };
 }
 
 function getSparkline(provider, model) {
   const key = `${provider}__${model}`;
   const buckets = sparklineData[key] || [];
-  const now = Math.floor(Date.now() / 60000);
-  const result = new Array(30).fill(0);
+  const now = Math.floor(Date.now() / (ACT_BUCKET_MIN * 60000));
+  const result = new Array(ACT_BUCKET_COUNT).fill(0);
   for (const b of buckets) {
-    const idx = 29 - (now - b.minute);
-    if (idx >= 0 && idx < 30) result[idx] = b.count;
+    const idx = ACT_BUCKET_COUNT - 1 - (now - b.bucket);
+    if (idx >= 0 && idx < ACT_BUCKET_COUNT) result[idx] = b.count;
   }
   return result;
 }
@@ -282,13 +363,14 @@ function getAllSparklines() {
 }
 
 loadStats();
+loadActivityData();
 
 setInterval(() => {
   proxyEvents.emit('velocity_update', {
     ...calculateVelocity(),
     sparklines: getAllSparklines()
   });
-}, 5000);
+}, ACT_PUSH_INTERVAL);
 
 // ==========================================
 // SSE client management
@@ -552,7 +634,13 @@ const server = http.createServer((req, res) => {
       providers: cooldownStatus,
       velocity: calculateVelocity(),
       discounts,
-      sparklines: getAllSparklines()
+      sparklines: getAllSparklines(),
+      activityConfig: {
+        windowMinutes: ACT_WINDOW_MIN,
+        bucketMinutes: ACT_BUCKET_MIN,
+        bucketCount: ACT_BUCKET_COUNT,
+        pushIntervalMs: ACT_PUSH_INTERVAL
+      }
     }));
     return;
   }

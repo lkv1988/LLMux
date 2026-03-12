@@ -60,5 +60,10 @@
       "apiKey": "sk-ant-api03-YOUR_OFFICIAL_KEY_HERE",
       "discountRate": 1.0
     }
-  ]
+  ],
+  "activity": {
+    "windowMinutes": 240,
+    "bucketMinutes": 5,
+    "pushIntervalMs": 5000
+  }
 }
