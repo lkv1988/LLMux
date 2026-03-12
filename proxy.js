@@ -393,6 +393,12 @@ function attemptProviderRequest(req, res, bodyBuffer, targetProvider, reqId, req
       }
 
       // Normal response (200 etc.)
+      // Check if headers were already sent (e.g., from a previous failed attempt)
+      if (res.headersSent) {
+        reject(new Error('Response headers already sent, cannot retry'));
+        return;
+      }
+
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
       let responseBodyAccumulator = '';
@@ -664,6 +670,12 @@ const server = http.createServer((req, res) => {
             logMessage('error', `  ❌ [Failed] [${reqId}] Provider ${provider.name} (attempt ${attempts}) error (elapsed: ${attemptElapsed}s): ${err.message}`, reqId);
             lastErrorMsg = err.message;
 
+            // If response headers were already sent, we cannot retry
+            if (res.headersSent) {
+              logMessage('error', `  ⚠️  [${reqId}] Cannot retry - response already started`, reqId);
+              return; // Exit early, response is already in progress
+            }
+
             if (attempts < maxAttempts) {
               await new Promise(resolve => setTimeout(resolve, 500));
             }
@@ -672,13 +684,23 @@ const server = http.createServer((req, res) => {
 
         setProviderCooldown(matchedGroupKey, provider.name);
 
+        // If response has already started, we cannot try another provider
+        if (res.headersSent) {
+          logMessage('error', `  ⚠️  [${reqId}] Cannot fallback to next provider - response already started`, reqId);
+          return;
+        }
+
         if (i < availableProviders.length - 1) {
           logMessage('info', `  ⏭️  Preparing fallback to next provider...`, reqId);
         }
       }
 
       logMessage('error', `🚨 [Critical] [${reqId}] All providers in group [${matchedGroupKey}] failed!`, reqId);
-      return sendAnthropicError(res, 502, 'api_error', `All providers for ${matchedGroupKey} failed. Last error: ${lastErrorMsg}`, reqId);
+
+      // Only send error response if we haven't already started sending a response
+      if (!res.headersSent) {
+        return sendAnthropicError(res, 502, 'api_error', `All providers for ${matchedGroupKey} failed. Last error: ${lastErrorMsg}`, reqId);
+      }
     });
     return;
   }
