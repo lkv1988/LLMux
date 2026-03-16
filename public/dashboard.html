@@ -456,12 +456,19 @@
             const now = Date.now();
             const dates = getDateRange();
 
+            console.log('=== Before cleanup ===');
+            console.log('activeProviders:', JSON.stringify(activeProviders, null, 2));
+
             // Clean up expired cooldown providers
             for (const [key, data] of Object.entries(activeProviders)) {
                 if (data.status === 'cooldown' && data.expiry <= now) {
+                    console.log('Deleting expired cooldown:', key, data);
                     delete activeProviders[key];
                 }
             }
+
+            console.log('=== After cleanup ===');
+            console.log('activeProviders:', JSON.stringify(activeProviders, null, 2));
 
             const providerTTFB = {};
             for (const date of dates) {
@@ -478,7 +485,8 @@
                 }
             }
 
-            for (const [, data] of Object.entries(activeProviders)) {
+            for (const [key, data] of Object.entries(activeProviders)) {
+                console.log('Rendering provider:', key, data);
                 const isCooldown = data.status === 'cooldown' && data.expiry > now;
                 const dotColor = isCooldown ? '#ef4444' : '#10b981';
                 const statusText = isCooldown ? `${Math.ceil((data.expiry - now) / 1000)}s` : 'Active';
