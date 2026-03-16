@@ -461,10 +461,6 @@
                 if (data.status === 'cooldown' && data.expiry <= now) {
                     delete activeProviders[key];
                 }
-                // Remove active status entries (only show cooldown providers)
-                if (data.status === 'active') {
-                    delete activeProviders[key];
-                }
             }
 
             const providerTTFB = {};
@@ -484,21 +480,19 @@
 
             for (const [, data] of Object.entries(activeProviders)) {
                 const isCooldown = data.status === 'cooldown' && data.expiry > now;
-                if (!isCooldown) continue; // Only show cooldown providers
-
-                const dotColor = '#ef4444';
-                const statusText = `${Math.ceil((data.expiry - now) / 1000)}s`;
+                const dotColor = isCooldown ? '#ef4444' : '#10b981';
+                const statusText = isCooldown ? `${Math.ceil((data.expiry - now) / 1000)}s` : 'Active';
                 const avgTTFB = providerTTFB[data.provider] && providerTTFB[data.provider].count > 0
                     ? (providerTTFB[data.provider].ttfb / providerTTFB[data.provider].count / 1000).toFixed(1) + 's'
                     : '';
 
                 const pill = document.createElement('div');
-                pill.className = 'provider-pill cooldown';
+                pill.className = 'provider-pill ' + (isCooldown ? 'cooldown' : 'active');
                 pill.innerHTML = `
                     <div style="width:7px;height:7px;background:${dotColor};border-radius:50%;"></div>
                     <span>${data.provider}</span>
                     ${avgTTFB ? `<span style="color:#6b7280;font-size:0.65rem;">~${avgTTFB}</span>` : ''}
-                    <span style="font-weight:600;">${statusText}</span>
+                    ${isCooldown ? `<span style="font-weight:600;">${statusText}</span>` : ''}
                 `;
                 providerPillsEl.appendChild(pill);
             }
