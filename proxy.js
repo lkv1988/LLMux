@@ -4,25 +4,26 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const { EventEmitter } = require('events');
+const JSON5 = require('json5');
 
 function localDateStr(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // ==========================================
-// 1. Load external config file config.json (hot reload support)
+// 1. Load external config file config.json5 (hot reload support)
 // ==========================================
-const configPath = path.join(__dirname, 'config.json');
+const configPath = path.join(__dirname, 'config.json5');
 let config;
 
 function loadConfig() {
   try {
     const configFile = fs.readFileSync(configPath, 'utf8');
-    config = JSON.parse(configFile);
-    console.log('✅ Config loaded: config.json');
+    config = JSON5.parse(configFile);
+    console.log('✅ Config loaded: config.json5');
     return true;
   } catch (err) {
-    console.error('❌ Failed to read or parse config.json:', err.message);
+    console.error('❌ Failed to read or parse config.json5:', err.message);
     return false;
   }
 }
