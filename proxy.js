@@ -431,6 +431,7 @@ function attemptProviderRequest(req, res, bodyBuffer, targetProvider, reqId, req
 
     const proxyHeaders = { ...req.headers };
     delete proxyHeaders['host'];
+    delete proxyHeaders['authorization'];  // Remove client's auth header before setting provider's key
     proxyHeaders['host'] = targetUrl.host;
     proxyHeaders['x-api-key'] = targetProvider.apiKey;
     proxyHeaders['content-length'] = Buffer.byteLength(bodyBuffer);
@@ -457,7 +458,7 @@ function attemptProviderRequest(req, res, bodyBuffer, targetProvider, reqId, req
       clearTimeout(ttfbTimer);
       const ttfbMs = Date.now() - attemptStartMs;
       const statusCode = proxyRes.statusCode;
-      const shouldFallback = statusCode === 429 || statusCode === 401 || statusCode === 403 || statusCode >= 500;
+      const shouldFallback = statusCode === 424 || statusCode === 429 || statusCode === 401 || statusCode === 403 || statusCode >= 500;
 
       if (shouldFallback) {
         let errorBody = '';
