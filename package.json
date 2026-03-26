@@ -6,10 +6,22 @@
   "scripts": {
     "start": "node proxy.js"
   },
-  "keywords": ["llm", "proxy", "anthropic", "claude", "api", "failover", "circuit-breaker", "dashboard"],
+  "keywords": [
+    "llm",
+    "proxy",
+    "anthropic",
+    "claude",
+    "api",
+    "failover",
+    "circuit-breaker",
+    "dashboard"
+  ],
   "author": "Kevin <airk908@gmail.com>",
   "license": "AGPL-3.0",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "json5": "^2.2.3"
   }
 }
