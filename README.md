@@ -24,7 +24,7 @@ Request Patching    ·  JSONL Traffic Logs
 **Cost Tracking**: Per-provider, per-model token counts with discount rate support.
 **TTFB Monitoring**: Track Time To First Byte; detect slow providers before they block your workflow.
 **Dashboard**: Real-time UI with token velocity, cache hit rates, provider health, sparkline activity.
-**Hot Reload**: Edit `config.json`, changes apply instantly without restarting.
+**Hot Reload**: Edit `config.json5`, changes apply instantly without restarting.
 **Request Patching**: Fixes Claude Code edge-case 400 errors by stripping empty text blocks.
 **Traffic Logs**: Daily JSONL files, auto-cleaned after 15 days.
 
@@ -52,10 +52,10 @@ Access at `http://localhost:34250/dashboard` after starting the proxy. On macOS,
 ```bash
 git clone https://github.com/lkv1988/llmux.git
 cd llmux
-cp config.example.json config.json
+cp config.example.json5 config.json5
 ```
 
-Edit `config.json` with your API keys. Here's an example that routes Sonnet to multiple providers (you can configure any routing strategy you want):
+Edit `config.json5` with your API keys. Here's an example that routes Sonnet to multiple providers (you can configure any routing strategy you want):
 
 ```json
 {
@@ -100,7 +100,7 @@ Base URL: http://localhost:34250
 API Key:  sk-ant-dummy-placeholder-key
 ```
 
-The API key can be any valid format—the proxy ignores it and uses keys from `config.json`.
+The API key can be any valid format—the proxy ignores it and uses keys from `config.json5`.
 
 ### 4. Open the dashboard
 
@@ -179,7 +179,7 @@ Request lifecycle in 8 steps:
 7. **Failover on error**: HTTP 429/401/403/5xx triggers immediate failover to next provider; failed provider enters cooldown
 8. **Success**: Streams response back to client, extracts token usage from SSE stream or JSON body, updates stats
 
-**Hot config reload**: `config.json` changes are detected via `fs.watch` and applied instantly—all provider cooldowns are cleared on reload.
+**Hot config reload**: `config.json5` changes are detected via `fs.watch` and applied instantly—all provider cooldowns are cleared on reload.
 
 **Circuit breaker**: Failed providers are benched for `cooldownMinutes` (default: 5). If all providers are in cooldown, the proxy forces a retry anyway (better to try a flaky provider than fail immediately).
 
