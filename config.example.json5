@@ -1,21 +1,30 @@
 {
+  // 代理监听端口
   "port": 34250,
+
+  // 熔断冷却时间（分钟）- provider 失败后多久可以重试
   "cooldownMinutes": 5,
+
+  // 每个 provider 最大重试次数
   "maxAttemptsPerProvider": 3,
+
+  // TTFB (Time To First Byte) 超时时间（毫秒）
   "ttfbTimeoutMs": 60000,
+
+  // 模型分组配置 - 按模型类型路由到不同的 provider
   "modelGroups": {
     "opus": [
       {
         "name": "provider_opus_main",
         "baseUrl": "https://api.anthropic.com",
         "apiKey": "sk-ant-api03-YOUR_EXPENSIVE_KEY_HERE",
-        "discountRate": 1.0
+        "discountRate": 1.0  // 折扣率：1.0 = 官方价格
       },
       {
         "name": "provider_opus_backup",
         "baseUrl": "https://api.backup-expensive.com",
         "apiKey": "sk-YOUR_BACKUP_EXPENSIVE_KEY_HERE",
-        "discountRate": 0.8
+        "discountRate": 0.8  // 0.8 = 官方价格的 80%
       }
     ],
     "sonnet": [
@@ -53,6 +62,8 @@
       }
     ]
   },
+
+  // 默认 provider - 当请求的模型不在 modelGroups 中时使用
   "defaultProviders": [
     {
       "name": "fallback_official",
@@ -61,9 +72,11 @@
       "discountRate": 1.0
     }
   ],
+
+  // 活动统计配置
   "activity": {
-    "windowMinutes": 240,
-    "bucketMinutes": 5,
-    "pushIntervalMs": 5000
+    "windowMinutes": 240,      // 统计时间窗口（分钟）
+    "bucketMinutes": 5,         // 每个时间桶的大小（分钟）
+    "pushIntervalMs": 5000      // 推送到客户端的间隔（毫秒）
   }
 }
