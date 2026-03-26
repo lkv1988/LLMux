@@ -12,6 +12,7 @@
   "ttfbTimeoutMs": 60000,
 
   // 模型分组配置 - 按模型类型路由到不同的 provider
+  // 支持逗号分隔的模型名（如 "sonnet,haiku"）来共享同一组 providers
   "modelGroups": {
     "opus": [
       {
@@ -27,7 +28,7 @@
         "discountRate": 0.8  // 0.8 = 官方价格的 80%
       }
     ],
-    "sonnet": [
+    "sonnet,haiku": [
       {
         "name": "provider_sonnet_cheap_1",
         "baseUrl": "https://api.cheap-proxy-1.com",
@@ -42,20 +43,6 @@
       },
       {
         "name": "provider_sonnet_official_fallback",
-        "baseUrl": "https://api.anthropic.com",
-        "apiKey": "sk-ant-api03-YOUR_OFFICIAL_KEY_HERE",
-        "discountRate": 1.0
-      }
-    ],
-    "haiku": [
-      {
-        "name": "provider_haiku_cheap_1",
-        "baseUrl": "https://api.cheap-proxy-1.com",
-        "apiKey": "sk-YOUR_CHEAP_KEY_1",
-        "discountRate": 0.5
-      },
-      {
-        "name": "provider_haiku_official_fallback",
         "baseUrl": "https://api.anthropic.com",
         "apiKey": "sk-ant-api03-YOUR_OFFICIAL_KEY_HERE",
         "discountRate": 1.0

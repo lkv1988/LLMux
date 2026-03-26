@@ -703,7 +703,12 @@ const server = http.createServer((req, res) => {
       let providersForModel = config.defaultProviders || [];
 
       for (const [groupName, providers] of Object.entries(config.modelGroups)) {
-        if (requestedModel.toLowerCase().includes(groupName.toLowerCase())) {
+        // Support comma-separated model names in key (e.g., "sonnet,haiku")
+        const modelNames = groupName.split(',').map(name => name.trim());
+        const matched = modelNames.some(name =>
+          requestedModel.toLowerCase().includes(name.toLowerCase())
+        );
+        if (matched) {
           matchedGroupKey = groupName;
           providersForModel = providers;
           break;
