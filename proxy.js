@@ -430,12 +430,29 @@ function attemptProviderRequest(req, res, bodyBuffer, targetProvider, reqId, req
     const baseUrl = targetProvider.baseUrl.replace(/\/$/, '');
     const targetUrl = new URL(baseUrl + req.url);
 
+    const EXPECTED_DUMMY_KEY = 'sk-ant-dummy-placeholder-key';
     const proxyHeaders = { ...req.headers };
-    delete proxyHeaders['host'];
-    delete proxyHeaders['authorization'];  // Remove client's auth header before setting provider's key
+
+    delete proxyHeaders['transfer-encoding'];
     proxyHeaders['host'] = targetUrl.host;
-    proxyHeaders['x-api-key'] = targetProvider.apiKey;
     proxyHeaders['content-length'] = Buffer.byteLength(bodyBuffer);
+
+    let foundDummyKey = false;
+
+    // 遍历所有 header，只要值里包含这个假的占位符，有多少替换多少
+    for (const [key, value] of Object.entries(proxyHeaders)) {
+      if (typeof value === 'string' && value.includes(EXPECTED_DUMMY_KEY)) {
+        proxyHeaders[key] = value.replace(new RegExp(EXPECTED_DUMMY_KEY, 'g'), targetProvider.apiKey);
+        foundDummyKey = true;
+      }
+    }
+
+    if (!foundDummyKey) {
+      const errMsg = `API Key 填写错误！请检查客户端配置，必须将 API Key 严格设置为占位符: [${EXPECTED_DUMMY_KEY}]`;
+      logMessage('error', `🚨 [${reqId}] 拦截请求: ${errMsg}`, reqId);
+      sendAnthropicError(res, 401, 'authentication_error', errMsg, reqId);
+      return reject(new Error(errMsg));
+    }
 
     const options = {
       hostname: targetUrl.hostname,
@@ -666,22 +683,8 @@ const server = http.createServer((req, res) => {
         return sendAnthropicError(res, 400, 'invalid_request_error', 'Invalid JSON body', reqId);
       }
 
-      // Intercept and fix illegal empty text blocks from Claude Code (avoid upstream 400 error)
-      if (bodyJSON.messages && Array.isArray(bodyJSON.messages)) {
-        let modified = false;
-        for (const msg of bodyJSON.messages) {
-          if (msg.content && Array.isArray(msg.content)) {
-            const originalLength = msg.content.length;
-            msg.content = msg.content.filter(block => !(block.type === 'text' && block.text === ''));
-            if (msg.content.length !== originalLength) {
-              modified = true;
-            }
-          }
-        }
-        if (modified) {
-          bodyData = [Buffer.from(JSON.stringify(bodyJSON))];
-        }
-      }
+      // ⚠️ 删除了之前拦截并删除 Claude Code 非法空文本块的逻辑。
+      // 现在请求体完全透传，不做任何修改。
 
       // Log detailed request content to JSONL
       logToJSONL({
@@ -817,7 +820,7 @@ function startServer(port) {
     console.log(`\n📊 Dashboard: http://localhost:${port}/dashboard`);
     console.log(`\n🔌 Configure your client with:`);
     console.log(`\x1b[36mBase URL: http://localhost:${port}\x1b[0m`);
-    console.log(`\x1b[36mAPI Key:  sk-ant-dummy-placeholder-key (or any valid format)\x1b[0m`);
+    console.log(`\x1b[36mAPI Key:  sk-ant-dummy-placeholder-key (必须严格填写此占位符)\x1b[0m`);
     console.log(`===================================================`);
     console.log(`⏳ Waiting for client requests...`);
 
