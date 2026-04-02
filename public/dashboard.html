@@ -534,7 +534,11 @@
         function getModelGroup(modelName) {
             const m = modelName.toLowerCase();
             for (const group in providerDiscounts) {
-                if (group !== 'default' && m.includes(group.toLowerCase())) return group;
+                if (group === 'default') continue;
+                // 支持逗号分隔的模型组（如 "sonnet,haiku"）
+                const modelNames = group.split(',').map(name => name.trim().toLowerCase());
+                const matched = modelNames.some(name => m.includes(name));
+                if (matched) return group;
             }
             return 'default';
         }
